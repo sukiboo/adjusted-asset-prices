@@ -1,5 +1,6 @@
 from typing import cast
 
+import numpy as np
 import pandas as pd
 
 from .schemas import AssetType
@@ -53,14 +54,19 @@ class Prices:
         2. Adjust for splits
         3. Adjust for dividends
         """
-        self.backfill_prices(df)
-        self.adjust_splits(df, asset_type)
-        self.adjust_dividends(df, asset_type)
+        df = self.backfill_prices(df)
+        df = self.adjust_splits(df, asset_type)
+        df = self.adjust_dividends(df, asset_type)
         return df
 
     def backfill_prices(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Backfill the missing price values."""
-        df = df.ffill().bfill()
+        """Backfill the missing price values and fill in missing rows.
+        Creates a complete 1-minute timestamp range from the first to last timestamp,
+        then uses exponential interpolation to fill in gaps via log -> linear interpolate -> exp
+        """
+        col = df.columns[0]
+        df = df.reindex(pd.date_range(start=df.index[0], end=df.index[-1], freq="1min"))
+        df[col] = df[col].apply(np.log).interpolate(method="linear").apply(np.exp).ffill().bfill()
         return df
 
     def adjust_splits(self, df: pd.DataFrame, asset_type: AssetType) -> pd.DataFrame:
