@@ -14,7 +14,8 @@ class Prices:
     backfilled prices and the split and dividend data.
     """
 
-    def __init__(self, data_dir: str) -> None:
+    def __init__(self, data_dir: str, debug: bool = False) -> None:
+        self.debug = debug
         self.data_dir, self.asset_types = check_data_dir(data_dir)
 
     def get_prices(
@@ -29,6 +30,7 @@ class Prices:
         self, ticker: str, date_start: str | None = None, date_end: str | None = None
     ) -> tuple[pd.DataFrame, AssetType]:
         """Load prices for a given ticker and date range."""
+        print(f"⛏️  Loading {ticker} price data...")
         df, asset_type = load_ticker_data(
             self.data_dir, self.asset_types, ticker, date_start, date_end
         )
@@ -39,12 +41,14 @@ class Prices:
         df = df.sort_values("timestamp").set_index("timestamp")
         df = pd.DataFrame(df[["close"]]).rename(columns={"close": ticker})
 
-        start_date = parse_date(cast(pd.Timestamp, df.index[0]))
-        end_date = parse_date(cast(pd.Timestamp, df.index[-1]))
-        print(
-            f"Loaded {len(df)} price records for {ticker} "
-            f"from {start_date} to {end_date}:\n{df.head()}"
-        )
+        if self.debug:
+            start_date = parse_date(cast(pd.Timestamp, df.index[0]))
+            end_date = parse_date(cast(pd.Timestamp, df.index[-1]))
+            print(
+                f"🗑️  Loaded {len(df):,} price records for {ticker} "
+                f"from {start_date} to {end_date}:"
+                f"\n{'-' * 32}\n{df.head(5)}\n{'-' * 32}"
+            )
 
         return df, asset_type
 
@@ -54,6 +58,7 @@ class Prices:
         2. Adjust for splits
         3. Adjust for dividends
         """
+        print(f"⚙️  Adjusting {df.columns[0]} price data...")
         df = self.backfill_prices(df)
         df = self.adjust_splits(df, asset_type)
         df = self.adjust_dividends(df, asset_type)
@@ -64,23 +69,29 @@ class Prices:
         Creates a complete 1-minute timestamp range from the first to last timestamp,
         then uses exponential interpolation to fill in gaps via log -> linear interpolate -> exp
         """
-        col = df.columns[0]
+        col, num_rows = df.columns[0], len(df)
         df = df.reindex(pd.date_range(start=df.index[0], end=df.index[-1], freq="1min"))
         df[col] = df[col].apply(np.log).interpolate(method="linear").apply(np.exp).ffill().bfill()
+        if self.debug and len(df) > num_rows:
+            print(f"🔧 Backfilled {len(df) - num_rows:,} new rows")
         return df
 
     def adjust_splits(self, df: pd.DataFrame, asset_type: AssetType) -> pd.DataFrame:
         """Adjust for historical prices for stock splits/merges."""
         if asset_type not in [AssetType.STOCKS, AssetType.OPTIONS]:
+            if self.debug:
+                print(f"🪚  Not adjusting {asset_type} assets for splits/merges")
             return df
         else:
-            print(f"Adjusting for splits/merges is not yet implemented")
+            print(f"🪚  Adjusting for splits/merges is not yet implemented")
             return df
 
     def adjust_dividends(self, df: pd.DataFrame, asset_type: AssetType) -> pd.DataFrame:
         """Adjust for historical prices for stock dividends."""
         if asset_type != AssetType.STOCKS:
+            if self.debug:
+                print(f"🔩 Not adjusting {asset_type} assets for dividends")
             return df
         else:
-            print(f"Adjusting for dividends is not yet implemented")
+            print(f"🔩 Adjusting for dividends is not yet implemented")
             return df
