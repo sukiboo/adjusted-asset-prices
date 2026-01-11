@@ -8,16 +8,20 @@ import yfinance as yf
 sns.set_theme(style="darkgrid", palette="muted", font="monospace", rc={"lines.linewidth": 2})
 
 
-def check_prices(df: pd.DataFrame) -> None:
+def check_prices(df: pd.DataFrame) -> bool:
     """Collection of sanity checks for the price data."""
     print(f"\n🔍 Checking {df.columns[0]} price data...")
-    check_for_gaps(df, gap_threshold_mins=1, num_gaps_display=10)
-    compare_to_yf(df, diff_threshold_pct=1.0, show_plot=True)
+    return all(
+        [
+            check_for_gaps(df, gap_threshold_mins=1, num_gaps_display=10),
+            compare_to_yf(df, diff_threshold_pct=1.0, show_plot=True),
+        ]
+    )
 
 
 def check_for_gaps(
     df: pd.DataFrame, gap_threshold_mins: int = 1, num_gaps_display: int = 10
-) -> None:
+) -> bool:
     """Check for gaps in the price data where adjacent timestamps are longer
     than `gap_threshold_mins` minutes apart.
     """
@@ -27,7 +31,7 @@ def check_for_gaps(
 
     if len(gaps_series) == 0:
         print("✔️  No gaps found in the price data")
-        return
+        return True
 
     gap_info = []
     for gap_end in gaps_series.index:
@@ -42,10 +46,12 @@ def check_for_gaps(
     for idx, row in gap_df.iterrows():
         print(f"{row['gap_duration']}: {row['gap_start']} -> {row['gap_end']}")
 
+    return False
+
 
 def compare_to_yf(
     df: pd.DataFrame, diff_threshold_pct: float = 1.0, show_plot: bool = True
-) -> None:
+) -> bool:
     """Compare the price data to Yahoo Finance.
     Displays a plot of the price data and the difference between the two datasets.
     """
@@ -63,7 +69,7 @@ def compare_to_yf(
         yf_df = yf.Ticker(ticker).history(start=start_date, end=end_date + pd.Timedelta(days=1))
         if yf_df.empty:
             print(f"⚠️  Warning: No yfinance data found for {ticker}")
-            return
+            return False
 
         yf_daily = yf_df["Close"].copy()
         yf_daily_index = pd.to_datetime(yf_daily.index)
@@ -75,8 +81,8 @@ def compare_to_yf(
         comparison = pd.concat([our_daily, yf_daily], axis=1).dropna()
         comparison.columns = ["our_close", "yf_close"]
         if comparison.empty:
-            print("Warning: No overlapping dates")
-            return
+            print("⚠️  Warning: No overlapping dates")
+            return False
 
         # Calculate differences
         diff = comparison["our_close"] - comparison["yf_close"]
@@ -121,5 +127,8 @@ def compare_to_yf(
             plt.tight_layout()
             plt.show()
 
+        return status != "❗"
+
     except Exception as e:
         print(f"⚠️  Error comparing with yfinance: {e}")
+        return False
