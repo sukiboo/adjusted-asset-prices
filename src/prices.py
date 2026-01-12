@@ -74,6 +74,7 @@ class Prices:
         df[col] = df[col].apply(np.log).interpolate(method="linear").apply(np.exp).ffill().bfill()
         if self.debug and len(df) > num_rows:
             print(f"🔧 Backfilled {len(df) - num_rows:,} new rows")
+        df.index.name = "timestamp"
         return df
 
     def adjust_splits(self, df: pd.DataFrame, asset_type: AssetType) -> pd.DataFrame:

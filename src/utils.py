@@ -1,3 +1,4 @@
+import os
 from datetime import date, datetime
 from pathlib import Path
 from typing import Tuple, cast
@@ -131,3 +132,36 @@ def load_ticker_data(
         raise ValueError(f"No data found for `{asset_type}` ticker `{ticker}`")
 
     return pd.concat(dfs, ignore_index=True), asset_type
+
+
+def save_prices(df: pd.DataFrame, save_dir: str = "./data/prices", format: str = "parquet") -> None:
+    """Save the prices to a CSV or Parquet file."""
+    ticker = df.columns[0]
+    save_path = f"{save_dir}/{ticker}.{format}"
+    os.makedirs(save_dir, exist_ok=True)
+    if format == "csv":
+        df.to_csv(save_path, index=True)
+    elif format == "parquet":
+        df.to_parquet(save_path)
+    else:
+        raise ValueError(f"Invalid format: {format}, must be `csv` or `parquet`")
+    print(f"💾 Saved {ticker} prices to {save_path}")
+
+
+def load_prices(file_name: str, load_dir: str = "./data/prices") -> pd.DataFrame:
+    """Load prices from a CSV or Parquet file. Format is detected from file extension."""
+    file_path = os.path.join(load_dir, file_name)
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Price file not found: `{file_path}`")
+
+    try:
+        file_ext = os.path.splitext(file_name)[1].lower()
+        if file_ext == ".csv":
+            df = pd.read_csv(file_path, index_col=0, parse_dates=True)
+        elif file_ext == ".parquet":
+            df = pd.read_parquet(file_path)
+        else:
+            raise ValueError(f"Unsupported file format: `{file_ext}`, must be `csv` or `parquet`")
+        return df
+    except Exception as e:
+        raise RuntimeError(f"Failed to load prices from `{file_path}`: {e}") from e
