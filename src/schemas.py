@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from enum import StrEnum
+from typing import TypedDict
 
 import pandas as pd
 
@@ -28,3 +29,13 @@ ASSET_TYPE_CONFIG: dict[AssetType, dict[str, str]] = {
 }
 
 DateLike = str | date | datetime | pd.Timestamp | None
+
+
+class ChecksConfig(TypedDict, total=False):
+    """Parameters for price data checks."""
+
+    gap_threshold_mins: int
+    num_gaps_display: int
+    diff_threshold_avg: float
+    diff_threshold_max: float
+    show_plot: bool

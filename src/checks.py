@@ -5,16 +5,27 @@ import pandas as pd
 import seaborn as sns
 import yfinance as yf
 
+from .schemas import ChecksConfig
+
 sns.set_theme(style="darkgrid", palette="muted", font="monospace", rc={"lines.linewidth": 2})
 
 
-def check_prices(df: pd.DataFrame) -> bool:
+def check_prices(df: pd.DataFrame, config: ChecksConfig = {}) -> bool:
     """Collection of sanity checks for the price data."""
     print(f"\n🔍 Checking {df.columns[0]} price data...")
     return all(
         [
-            check_for_gaps(df, gap_threshold_mins=1, num_gaps_display=10),
-            compare_to_yf(df, diff_threshold_pct=1.0, show_plot=True),
+            check_for_gaps(
+                df,
+                gap_threshold_mins=config.get("gap_threshold_mins", 1),
+                num_gaps_display=config.get("num_gaps_display", 10),
+            ),
+            compare_to_yf(
+                df,
+                diff_threshold_avg=config.get("diff_threshold_avg", 0.1),
+                diff_threshold_max=config.get("diff_threshold_max", 5.0),
+                show_plot=config.get("show_plot", True),
+            ),
         ]
     )
 
@@ -50,7 +61,10 @@ def check_for_gaps(
 
 
 def compare_to_yf(
-    df: pd.DataFrame, diff_threshold_pct: float = 1.0, show_plot: bool = True
+    df: pd.DataFrame,
+    diff_threshold_avg: float = 0.1,
+    diff_threshold_max: float = 5.0,
+    show_plot: bool = True,
 ) -> bool:
     """Compare the price data to Yahoo Finance.
     Displays a plot of the price data and the difference between the two datasets.
@@ -89,11 +103,14 @@ def compare_to_yf(
         diff_pct = 100 * (diff / comparison["yf_close"])
 
         # Print summary
-        status = (
-            "❗"
-            if diff_pct.abs().max() > diff_threshold_pct
-            else "❕" if diff_pct.abs().max() > 0.5 * diff_threshold_pct else "✔️ "
-        )
+        avg_abs_diff = diff_pct.abs().mean()
+        max_abs_diff = diff_pct.abs().max()
+        if avg_abs_diff > diff_threshold_avg and max_abs_diff > diff_threshold_max:
+            status = "❗"
+        elif avg_abs_diff > 0.5 * diff_threshold_avg or max_abs_diff > 0.5 * diff_threshold_max:
+            status = "❕"
+        else:
+            status = "✔️ "
         print(
             f"{status} Price comparison over {len(comparison)} days (min/avg/max):"
             f" {diff_pct.min():.2f}% / {diff_pct.mean():.2f}% / {diff_pct.max():.2f}%"
@@ -115,10 +132,10 @@ def compare_to_yf(
                 diff_pct,
                 color="red",
                 linestyle=":",
-                alpha=0.6,
+                alpha=0.4,
                 label="Relative diff",
             )
-            ax2.set_ylim(-diff_threshold_pct, diff_threshold_pct)
+            ax2.set_ylim(-diff_threshold_max, diff_threshold_max)
             ax2.set_ylabel("Relative price difference (%)", color="red")
             ax2.grid(False)
             ax2.legend(loc="upper right")
