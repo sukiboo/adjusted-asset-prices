@@ -149,7 +149,11 @@ def save_prices(df: pd.DataFrame, save_dir: str = "./data/prices", format: str =
 
 
 def load_prices(file_name: str, load_dir: str = "./data/prices") -> pd.DataFrame:
-    """Load prices from a CSV or Parquet file. Format is detected from file extension."""
+    """Load prices from a CSV or Parquet file. Format is detected from file extension.
+
+    Timestamps are assumed to be UTC. For CSV files (which don't preserve timezone info),
+    the index is explicitly localized to UTC after loading.
+    """
     file_path = os.path.join(load_dir, file_name)
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Price file not found: `{file_path}`")
@@ -158,8 +162,14 @@ def load_prices(file_name: str, load_dir: str = "./data/prices") -> pd.DataFrame
         file_ext = os.path.splitext(file_name)[1].lower()
         if file_ext == ".csv":
             df = pd.read_csv(file_path, index_col=0, parse_dates=True)
+            # CSV doesn't preserve timezone info, so localize to UTC
+            if df.index.tz is None:  # type: ignore[attr-defined]
+                df.index = df.index.tz_localize("UTC")  # type: ignore[attr-defined]
         elif file_ext == ".parquet":
             df = pd.read_parquet(file_path)
+            # Parquet preserves timezone, but ensure it's UTC
+            if df.index.tz is None:  # type: ignore[attr-defined]
+                df.index = df.index.tz_localize("UTC")  # type: ignore[attr-defined]
         else:
             raise ValueError(f"Unsupported file format: `{file_ext}`, must be `csv` or `parquet`")
         return df

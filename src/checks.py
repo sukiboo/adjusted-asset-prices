@@ -68,16 +68,24 @@ def compare_to_yf(
 ) -> bool:
     """Compare the price data to Yahoo Finance.
     Displays a plot of the price data and the difference between the two datasets.
+
+    Both datasets are normalized to UTC day boundaries for comparison.
     """
     ticker = df.columns[0]
     start_date = cast(pd.Timestamp, df.index[0])
     end_date = cast(pd.Timestamp, df.index[-1])
 
-    # Resample to daily and download yfinance data
-    our_daily = df[ticker].resample("D").last().dropna()
-    our_daily.index = our_daily.index.normalize()
-    if our_daily.index.tz is not None:
-        our_daily.index = our_daily.index.tz_localize(None)
+    # Ensure our data is UTC-aware before resampling to get consistent day boundaries
+    our_df = df.copy()
+    if our_df.index.tz is None:  # type: ignore[attr-defined]
+        our_df.index = our_df.index.tz_localize("UTC")  # type: ignore[attr-defined]
+    else:
+        our_df.index = our_df.index.tz_convert("UTC")  # type: ignore[attr-defined]
+
+    # Resample to daily using UTC day boundaries (last price before midnight UTC)
+    our_daily = our_df[ticker].resample("D").last().dropna()
+    # Convert to timezone-naive dates for comparison
+    our_daily.index = our_daily.index.tz_localize(None).normalize()
 
     try:
         yf_df = yf.Ticker(ticker).history(start=start_date, end=end_date + pd.Timedelta(days=1))
@@ -86,9 +94,10 @@ def compare_to_yf(
             return False
 
         yf_daily = yf_df["Close"].copy()
+        # yfinance returns timezone-aware timestamps; convert to UTC then strip timezone
         yf_daily_index = pd.to_datetime(yf_daily.index)
         if yf_daily_index.tz is not None:
-            yf_daily_index = yf_daily_index.tz_localize(None)
+            yf_daily_index = yf_daily_index.tz_convert("UTC").tz_localize(None)
         yf_daily.index = yf_daily_index.normalize()  # type: ignore[attr-defined]
 
         # Align datasets
