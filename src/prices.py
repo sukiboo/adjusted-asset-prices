@@ -37,8 +37,8 @@ class Prices:
         if "window_start" not in df.columns:
             raise ValueError(f"No window_start column found in data for ticker: `{ticker}`")
 
-        df["timestamp"] = pd.to_datetime(df["window_start"], unit="ns")
-        df = df.sort_values("timestamp").set_index("timestamp")
+        df["timestamp_utc"] = pd.to_datetime(df["window_start"], unit="ns", utc=True)
+        df = df.sort_values("timestamp_utc").set_index("timestamp_utc")
         df = pd.DataFrame(df[["close"]]).rename(columns={"close": ticker})
 
         if self.debug:
@@ -74,7 +74,7 @@ class Prices:
         df[col] = df[col].apply(np.log).interpolate(method="linear").apply(np.exp).ffill().bfill()
         if self.debug and len(df) > num_rows:
             print(f"🔧 Backfilled {len(df) - num_rows:,} new rows")
-        df.index.name = "timestamp"
+        df.index.name = "timestamp_utc"
         return df
 
     def adjust_splits(self, df: pd.DataFrame, asset_type: AssetType) -> pd.DataFrame:
