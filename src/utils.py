@@ -5,6 +5,7 @@ from typing import Tuple, cast
 
 import numpy as np
 import pandas as pd
+import yfinance as yf
 
 from .checks import check_prices
 from .schemas import (
@@ -151,6 +152,18 @@ def load_ticker_data(
         raise ValueError(f"No data found for `{asset_type}` ticker `{ticker}`")
 
     return pd.concat(dfs, ignore_index=True), asset_type
+
+
+def fetch_splits(ticker: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.Series:
+    """Fetch historical splits for `ticker` from yfinance, clipped to [start, end].
+    Returns a UTC tz-aware Series of split ratios indexed by ex-date; empty if none.
+    """
+    splits = yf.Ticker(ticker).splits
+    if splits.empty:
+        return splits
+    idx = pd.to_datetime(splits.index)
+    splits.index = idx.tz_convert("UTC") if idx.tz is not None else idx.tz_localize("UTC")
+    return splits.loc[start:end]
 
 
 def save_prices(

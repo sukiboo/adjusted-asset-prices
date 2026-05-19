@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from .schemas import AssetType
-from .utils import check_data_dir, load_ticker_data, parse_date
+from .utils import check_data_dir, fetch_splits, load_ticker_data, parse_date
 
 
 class Prices:
@@ -78,14 +78,33 @@ class Prices:
         return df
 
     def adjust_splits(self, df: pd.DataFrame, asset_type: AssetType) -> pd.DataFrame:
-        """Adjust for historical prices for stock splits/merges."""
-        if asset_type not in [AssetType.STOCKS, AssetType.OPTIONS]:
+        """Back-adjust historical prices for stock splits using yfinance split data.
+        For each split with ex-date D and ratio r, prices at timestamps < D are divided
+        by r. Options need contract-level adjustment (strike + multiplier) and are skipped.
+        """
+        if asset_type != AssetType.STOCKS:
             if self.debug:
-                print(f"🪚  Not adjusting {asset_type} assets for splits/merges")
+                print(f"🪚  Not adjusting {asset_type} assets for splits")
             return df
-        else:
-            print(f"🪚  Adjusting for splits/merges is not yet implemented")
+
+        ticker = df.columns[0]
+        splits = fetch_splits(
+            ticker,
+            cast(pd.Timestamp, df.index[0]),
+            cast(pd.Timestamp, df.index[-1]),
+        )
+        if splits.empty:
+            if self.debug:
+                print(f"🪚  No splits to apply for {ticker}")
             return df
+
+        df = df.copy()
+        for split_date, ratio in splits.items():
+            ts = cast(pd.Timestamp, split_date)
+            df.loc[df.index < ts, ticker] /= ratio
+            if self.debug:
+                print(f"🪚  Applied {ratio:g}-for-1 split on {ts.date()} to {ticker}")
+        return df
 
     def adjust_dividends(self, df: pd.DataFrame, asset_type: AssetType) -> pd.DataFrame:
         """Adjust for historical prices for stock dividends."""
