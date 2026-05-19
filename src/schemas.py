@@ -1,8 +1,10 @@
 from datetime import date, datetime
 from enum import StrEnum
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 import pandas as pd
+
+PriceFileFormat = Literal["parquet", "csv"]
 
 
 class AssetType(StrEnum):

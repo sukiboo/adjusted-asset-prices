@@ -7,7 +7,14 @@ import numpy as np
 import pandas as pd
 
 from .checks import check_prices
-from .schemas import ASSET_TYPE_CONFIG, ASSET_TYPES, AssetType, ChecksConfig, DateLike
+from .schemas import (
+    ASSET_TYPE_CONFIG,
+    ASSET_TYPES,
+    AssetType,
+    ChecksConfig,
+    DateLike,
+    PriceFileFormat,
+)
 
 
 def check_data_dir(data_dir: str) -> Tuple[Path, list[str]]:
@@ -34,6 +41,16 @@ def check_data_dir(data_dir: str) -> Tuple[Path, list[str]]:
         )
 
     return data_dir_path, asset_types
+
+
+def parsable_date(value: str | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        pd.to_datetime(value)
+    except (ValueError, TypeError) as e:
+        raise ValueError(f"Unparsable date: {value!r}") from e
+    return value
 
 
 def parse_date(date_input: DateLike = None, default: DateLike = None) -> date:
@@ -136,7 +153,9 @@ def load_ticker_data(
     return pd.concat(dfs, ignore_index=True), asset_type
 
 
-def save_prices(df: pd.DataFrame, save_dir: str = "./data/prices", format: str = "parquet") -> None:
+def save_prices(
+    df: pd.DataFrame, save_dir: str = "./data/prices", format: PriceFileFormat = "parquet"
+) -> None:
     """Save the prices to a CSV or Parquet file."""
     ticker = df.columns[0]
     save_path = f"{save_dir}/{ticker}.{format}"
@@ -179,7 +198,7 @@ def load_prices(file_name: str, load_dir: str = "./data/prices") -> pd.DataFrame
         raise RuntimeError(f"Failed to load prices from `{file_path}`: {e}") from e
 
 
-def verify_saved_prices(df: pd.DataFrame, save_dir: str, format: str) -> bool:
+def verify_saved_prices(df: pd.DataFrame, save_dir: str, format: PriceFileFormat) -> bool:
     """Reload the saved file and confirm it matches the in-memory data."""
     ticker = df.columns[0]
     loaded = load_prices(f"{ticker}.{format}", load_dir=save_dir)
@@ -193,7 +212,9 @@ def verify_saved_prices(df: pd.DataFrame, save_dir: str, format: str) -> bool:
     return True
 
 
-def save_if_valid(df: pd.DataFrame, save_dir: str, format: str, config: ChecksConfig) -> bool:
+def save_if_valid(
+    df: pd.DataFrame, save_dir: str, format: PriceFileFormat, config: ChecksConfig
+) -> bool:
     """Run checks; on success, save to disk and verify the round-trip."""
     if not check_prices(df, config=config):
         print("\n❌ Some checks failed, not saving the price data!")

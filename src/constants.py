@@ -1,4 +1,10 @@
-from .schemas import ChecksConfig
+from .schemas import ChecksConfig, PriceFileFormat
+
+DEFAULT_FORMAT: PriceFileFormat = "parquet"
+DEFAULT_DATE_START: str | None = None
+DEFAULT_DATE_END: str | None = None
+DEFAULT_DATA_DIR = "./data/files"
+DEFAULT_SAVE_DIR = "./data/prices"
 
 CHECKS_CONFIG: ChecksConfig = {
     "gap_threshold_mins": 1,

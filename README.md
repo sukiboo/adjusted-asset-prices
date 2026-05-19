@@ -43,3 +43,17 @@ Examples:
 python main.py BTC-USD --debug
 python main.py SPY --format csv --date-start 2024-01-01
 ```
+
+## Caveats
+
+- **Hard forks are not adjusted for.** When a chain splits (e.g. BCH from BTC, ETC from
+  ETH), pre-fork prices of the surviving ticker are technically inflated by the value of
+  the spun-off coin, analogously to a stock split. The pipeline does not currently
+  account for this — pre-fork bars are passed through as-is. Irrelevant for most majors
+  in typical date ranges, but worth knowing if you backtest across a known fork date.
+- **Backfilled minutes are synthetic and unmarked.** Missing 1-minute bars are filled
+  by log-space linear interpolation between the surrounding real prints; the output
+  carries no flag indicating which rows were interpolated vs. observed. For liquid
+  majors this is rare and the interpolation is close to truth, but for thin-volume
+  assets with long gaps the synthetic values can drift meaningfully from what real
+  trades would have produced.
