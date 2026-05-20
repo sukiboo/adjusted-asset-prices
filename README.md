@@ -22,9 +22,9 @@ The repo's `.python-version` pins the venv, so `cd`-ing in auto-activates it if 
 python main.py <TICKER> [OPTIONS]
 ```
 
-End-to-end pipeline for one ticker: load raw bars → backfill missing minutes → adjust
-(splits/dividends — currently stubbed) → run sanity checks → save to
-`./data/prices/<TICKER>.<format>` → reload and verify the round-trip.
+End-to-end pipeline for one ticker: load raw bars → backfill missing minutes → adjust for
+splits and cash dividends (stocks only, using yfinance metadata) → run sanity checks →
+save to `./data/prices/<TICKER>.<format>` → reload and verify the round-trip.
 
 Options:
 
@@ -46,6 +46,13 @@ python main.py SPY --format csv --date-start 2024-01-01
 
 ## Caveats
 
+- **Splits and dividends are sourced from yfinance.** The pipeline trusts
+  `yf.Ticker(...).splits`, `.dividends`, and `.history()` for the event list and the
+  reference closes used in factor computation. Future events known to yfinance at run
+  time are applied universally to historical prices (matching yfinance's `Adj Close`
+  convention), so a saved file is a snapshot — re-run if new distributions are announced
+  after the fact. Options inherit split metadata at the contract level and are not
+  back-adjusted here; non-stock asset types are passed through as-is.
 - **Hard forks are not adjusted for.** When a chain splits (e.g. BCH from BTC, ETC from
   ETH), pre-fork prices of the surviving ticker are technically inflated by the value of
   the spun-off coin, analogously to a stock split. The pipeline does not currently

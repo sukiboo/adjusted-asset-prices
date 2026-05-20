@@ -5,12 +5,12 @@ import pandas as pd
 import seaborn as sns
 import yfinance as yf
 
-from .schemas import ChecksConfig
+from .schemas import AssetType, ChecksConfig
 
 sns.set_theme(style="darkgrid", palette="muted", font="monospace", rc={"lines.linewidth": 2})
 
 
-def check_prices(df: pd.DataFrame, config: ChecksConfig) -> bool:
+def check_prices(df: pd.DataFrame, config: ChecksConfig, asset_type: AssetType) -> bool:
     """Collection of sanity checks for the price data."""
     print(f"\n🔍 Checking {df.columns[0]} price data...")
     return all(
@@ -22,6 +22,7 @@ def check_prices(df: pd.DataFrame, config: ChecksConfig) -> bool:
             ),
             compare_to_yf(
                 df,
+                asset_type=asset_type,
                 abs_rel_diff_pct_p50=config["abs_rel_diff_pct_p50"],
                 abs_rel_diff_pct_p99=config["abs_rel_diff_pct_p99"],
                 show_plot=config["show_plot"],
@@ -60,6 +61,7 @@ def check_for_gaps(df: pd.DataFrame, gap_threshold_mins: int, num_gaps_display: 
 
 def compare_to_yf(
     df: pd.DataFrame,
+    asset_type: AssetType,
     abs_rel_diff_pct_p50: float,
     abs_rel_diff_pct_p99: float,
     show_plot: bool,
@@ -67,7 +69,9 @@ def compare_to_yf(
     """Compare the price data to Yahoo Finance.
     Displays a plot of the price data and the difference between the two datasets.
 
-    Both datasets are normalized to UTC day boundaries for comparison.
+    For stocks/options, our daily close is the 1-min bar at 15:59 ET (regular-session
+    close) so it lines up with yfinance's 4 PM ET Close. For other asset types, we
+    fall back to UTC day boundaries since yfinance reports those at midnight UTC.
     """
     ticker = df.columns[0]
     start_date = cast(pd.Timestamp, df.index[0])
@@ -80,10 +84,16 @@ def compare_to_yf(
     else:
         our_df.index = our_df.index.tz_convert("UTC")  # type: ignore[attr-defined]
 
-    # Resample to daily using UTC day boundaries (last price before midnight UTC)
-    our_daily = our_df[ticker].resample("D").last().dropna()
-    # Convert to timezone-naive dates for comparison
-    our_daily.index = our_daily.index.tz_localize(None).normalize()  # type: ignore[attr-defined]
+    if asset_type in (AssetType.STOCKS, AssetType.OPTIONS):
+        # Pick the bar whose window_start is 15:59 ET — its close is the 4 PM ET print
+        et_index = our_df.index.tz_convert("America/New_York")  # type: ignore[attr-defined]
+        mask = (et_index.hour == 15) & (et_index.minute == 59)
+        our_daily = cast(pd.Series, our_df.loc[mask, ticker])
+        our_daily.index = pd.DatetimeIndex(et_index[mask]).normalize().tz_localize(None)
+    else:
+        # Crypto/forex: yfinance reports daily Close at midnight UTC
+        our_daily = our_df[ticker].resample("D").last().dropna()
+        our_daily.index = our_daily.index.tz_localize(None).normalize()  # type: ignore[attr-defined]
 
     try:
         yf_df = yf.Ticker(ticker).history(start=start_date, end=end_date + pd.Timedelta(days=1))

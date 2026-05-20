@@ -30,5 +30,13 @@ if __name__ == "__main__":
     args = parse_args()
 
     prices = Prices(data_dir=args.data_dir, debug=args.debug)
-    df = prices.get_prices(ticker=args.ticker, date_start=args.date_start, date_end=args.date_end)
-    save_if_valid(df, save_dir=args.save_dir, format=args.format, config=CHECKS_CONFIG)
+    df, asset_type = prices.get_prices(
+        ticker=args.ticker, date_start=args.date_start, date_end=args.date_end
+    )
+    save_if_valid(
+        df,
+        save_dir=args.save_dir,
+        format=args.format,
+        config=CHECKS_CONFIG,
+        asset_type=asset_type,
+    )

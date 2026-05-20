@@ -154,16 +154,45 @@ def load_ticker_data(
     return pd.concat(dfs, ignore_index=True), asset_type
 
 
-def fetch_splits(ticker: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.Series:
-    """Fetch historical splits for `ticker` from yfinance, clipped to [start, end].
-    Returns a UTC tz-aware Series of split ratios indexed by ex-date; empty if none.
+def fetch_splits(ticker: str, start: pd.Timestamp) -> pd.Series:
+    """Fetch yfinance splits for `ticker` with ex-date >= `start`.
+    No upper bound: events with ex-date *after* the data window still apply (the
+    `index < ex_date` mask in adjust_splits covers all rows), matching yfinance's
+    convention that historical prices reflect all known future events.
     """
     splits = yf.Ticker(ticker).splits
     if splits.empty:
         return splits
     idx = pd.to_datetime(splits.index)
     splits.index = idx.tz_convert("UTC") if idx.tz is not None else idx.tz_localize("UTC")
-    return splits.loc[start:end]
+    return splits.loc[start:]
+
+
+def fetch_dividends(ticker: str, start: pd.Timestamp) -> pd.Series:
+    """Fetch yfinance cash dividends for `ticker` with ex-date >= `start`.
+    See `fetch_splits` for why there's no upper bound.
+    """
+    divs = yf.Ticker(ticker).dividends
+    if divs.empty:
+        return divs
+    idx = pd.to_datetime(divs.index)
+    divs.index = idx.tz_convert("UTC") if idx.tz is not None else idx.tz_localize("UTC")
+    return divs.loc[start:]
+
+
+def fetch_yf_closes(ticker: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.Series:
+    """Fetch yfinance daily Close (split-adjusted, no dividend adjustment) for `ticker`
+    over [start, end]. Used as the `prev_close` reference in dividend factor computation
+    so adjusted prices match yfinance's Adj Close exactly — yfinance computes the factor
+    against its official 16:00 ET close, not the last bar before midnight ET.
+    """
+    h = yf.Ticker(ticker).history(start=start, end=end, auto_adjust=False)
+    if h.empty:
+        return pd.Series(dtype=float)
+    closes = h["Close"].copy()
+    idx = pd.to_datetime(closes.index)
+    closes.index = idx.tz_convert("UTC") if idx.tz is not None else idx.tz_localize("UTC")
+    return closes
 
 
 def save_prices(
@@ -226,10 +255,14 @@ def verify_saved_prices(df: pd.DataFrame, save_dir: str, format: PriceFileFormat
 
 
 def save_if_valid(
-    df: pd.DataFrame, save_dir: str, format: PriceFileFormat, config: ChecksConfig
+    df: pd.DataFrame,
+    save_dir: str,
+    format: PriceFileFormat,
+    config: ChecksConfig,
+    asset_type: AssetType,
 ) -> bool:
     """Run checks; on success, save to disk and verify the round-trip."""
-    if not check_prices(df, config=config):
+    if not check_prices(df, config=config, asset_type=asset_type):
         print("\n❌ Some checks failed, not saving the price data!")
         return False
     print("\n🎉 All checks passed, saving the price data...")

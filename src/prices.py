@@ -4,7 +4,14 @@ import numpy as np
 import pandas as pd
 
 from .schemas import AssetType
-from .utils import check_data_dir, fetch_splits, load_ticker_data, parse_date
+from .utils import (
+    check_data_dir,
+    fetch_dividends,
+    fetch_splits,
+    fetch_yf_closes,
+    load_ticker_data,
+    parse_date,
+)
 
 
 class Prices:
@@ -20,11 +27,11 @@ class Prices:
 
     def get_prices(
         self, ticker: str, date_start: str | None = None, date_end: str | None = None
-    ) -> pd.DataFrame:
-        """Get prices for a given ticker and date range."""
+    ) -> tuple[pd.DataFrame, AssetType]:
+        """Get prices for a given ticker and date range, paired with the detected asset type."""
         df, asset_type = self.load_prices(ticker, date_start, date_end)
         df = self.adjust_prices(df, asset_type)
-        return df
+        return df, asset_type
 
     def load_prices(
         self, ticker: str, date_start: str | None = None, date_end: str | None = None
@@ -55,7 +62,8 @@ class Prices:
     def adjust_prices(self, df: pd.DataFrame, asset_type: AssetType) -> pd.DataFrame:
         """Adjust prices for a given asset type via the following steps:
         1. Backfill the missing prices
-        2. Adjust for splits
+        2. Adjust for splits (yfinance reports dividends in current-share-equivalent
+           currency, so we put prices in that currency first)
         3. Adjust for dividends
         """
         print(f"⚙️  Adjusting {df.columns[0]} price data...")
@@ -88,11 +96,7 @@ class Prices:
             return df
 
         ticker = df.columns[0]
-        splits = fetch_splits(
-            ticker,
-            cast(pd.Timestamp, df.index[0]),
-            cast(pd.Timestamp, df.index[-1]),
-        )
+        splits = fetch_splits(ticker, cast(pd.Timestamp, df.index[0]))
         if splits.empty:
             if self.debug:
                 print(f"🪚  No splits to apply for {ticker}")
@@ -107,11 +111,46 @@ class Prices:
         return df
 
     def adjust_dividends(self, df: pd.DataFrame, asset_type: AssetType) -> pd.DataFrame:
-        """Adjust for historical prices for stock dividends."""
+        """Back-adjust historical prices for cash dividends using yfinance dividend data.
+        For each dividend with ex-date D and amount d, prices at timestamps < D are scaled
+        by (1 - d / c) where c is yfinance's official Close on the trading day before D.
+        Must run after adjust_splits: yfinance dividends are reported in current-share-
+        equivalent currency, so we apply them against already-split-adjusted prices.
+        """
         if asset_type != AssetType.STOCKS:
             if self.debug:
                 print(f"🔩 Not adjusting {asset_type} assets for dividends")
             return df
-        else:
-            print(f"🔩 Adjusting for dividends is not yet implemented")
+
+        ticker = df.columns[0]
+        divs = fetch_dividends(ticker, cast(pd.Timestamp, df.index[0])).sort_index()
+        if divs.empty:
+            if self.debug:
+                print(f"🔩 No dividends to apply for {ticker}")
             return df
+
+        yf_closes = fetch_yf_closes(
+            ticker,
+            cast(pd.Timestamp, df.index[0]),
+            cast(pd.Timestamp, divs.index[-1]) + pd.Timedelta(days=1),
+        )
+        df = df.copy()
+        for ex_date, amount in divs.items():
+            ts = cast(pd.Timestamp, ex_date)
+            mask = df.index < ts
+            if not mask.any():
+                continue
+            prev_closes = yf_closes[yf_closes.index < ts]
+            if prev_closes.empty:
+                if self.debug:
+                    print(f"🔩 Skipping {ts.date()} dividend: no yfinance close before ex-date")
+                continue
+            prev_close = prev_closes.iloc[-1]
+            factor = 1 - amount / prev_close
+            df.loc[mask, ticker] *= factor
+            if self.debug:
+                print(
+                    f"🔩 Applied ${amount:.4f} dividend on {ts.date()} "
+                    f"(factor {factor:.6f}) to {ticker}"
+                )
+        return df
