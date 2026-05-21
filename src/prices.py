@@ -12,6 +12,7 @@ from .utils import (
     fetch_yf_closes,
     load_ticker_data,
     parse_date,
+    resolve_index_bound,
 )
 
 
@@ -31,7 +32,7 @@ class Prices:
     ) -> tuple[pd.DataFrame, AssetType]:
         """Get prices for a given ticker and date range, paired with the detected asset type."""
         df, asset_type = self.load_prices(ticker, date_start, date_end)
-        df = self.adjust_prices(df, asset_type)
+        df = self.adjust_prices(df, asset_type, date_start, date_end)
         return df, asset_type
 
     def load_prices(
@@ -60,7 +61,13 @@ class Prices:
 
         return df, asset_type
 
-    def adjust_prices(self, df: pd.DataFrame, asset_type: AssetType) -> pd.DataFrame:
+    def adjust_prices(
+        self,
+        df: pd.DataFrame,
+        asset_type: AssetType,
+        date_start: str | None = None,
+        date_end: str | None = None,
+    ) -> pd.DataFrame:
         """Adjust prices for a given asset type via the following steps:
         1. Backfill the missing prices
         2. Adjust for splits (yfinance reports dividends in current-share-equivalent
@@ -68,22 +75,32 @@ class Prices:
         3. Adjust for dividends
         """
         print(f"⚙️  Adjusting {df.columns[0]} price data...")
-        df = self.backfill_prices(df, asset_type)
+        df = self.backfill_prices(df, asset_type, date_start, date_end)
         df = self.adjust_splits(df, asset_type)
         df = self.adjust_dividends(df, asset_type)
         return df
 
-    def backfill_prices(self, df: pd.DataFrame, asset_type: AssetType) -> pd.DataFrame:
+    def backfill_prices(
+        self,
+        df: pd.DataFrame,
+        asset_type: AssetType,
+        date_start: str | None = None,
+        date_end: str | None = None,
+    ) -> pd.DataFrame:
         """Backfill missing 1-minute rows over the appropriate trading calendar.
         Stocks use NYSE extended hours (04:00-19:59 ET on session days); options use NYSE
         regular hours (09:30-15:59 ET on session days). Half-days are handled by the
-        calendar. Crypto and forex use a continuous 1-min grid. Interpolation runs in log
-        space (log -> linear interpolate -> exp) to preserve multiplicative behavior.
+        calendar. Crypto and forex use a continuous 1-min grid. The output index spans
+        every session bar over [date_start, date_end] when those are supplied (synthetic
+        ffill/bfill prices on the first/last day if raw data does not reach the session
+        edges); otherwise it falls back to the calendar over [df.index[0], df.index[-1]]
+        with NYSE-asset timestamps converted to ET so .date() reflects the trading day.
+        Interpolation runs in log space to preserve multiplicative behavior.
         """
         col, num_rows = df.columns[0], len(df)
-        target_index = build_target_index(
-            cast(pd.Timestamp, df.index[0]), cast(pd.Timestamp, df.index[-1]), asset_type
-        )
+        start_ts = resolve_index_bound(date_start, cast(pd.Timestamp, df.index[0]), asset_type)
+        end_ts = resolve_index_bound(date_end, cast(pd.Timestamp, df.index[-1]), asset_type)
+        target_index = build_target_index(start_ts, end_ts, asset_type)
         df = df.reindex(target_index)
         assert df.index.equals(target_index), "backfill produced unexpected index"
         df[col] = df[col].apply(np.log).interpolate(method="linear").apply(np.exp).ffill().bfill()

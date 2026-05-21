@@ -66,15 +66,37 @@ def parse_date(date_input: DateLike = None, default: DateLike = None) -> date:
         raise
 
 
+def resolve_index_bound(
+    date_str: str | None, fallback: pd.Timestamp, asset_type: AssetType
+) -> pd.Timestamp:
+    """Resolve a build_target_index bound from optional user input + a fallback timestamp.
+    If `date_str` is given, return a naive midnight timestamp on that date (its `.date()`
+    is what build_target_index will use). Otherwise return `fallback`, tz-converted to
+    America/New_York for NYSE assets so the trading day -- not the UTC day -- drives the
+    round-trip in `_index_matches_calendar`.
+    """
+    if date_str:
+        return pd.Timestamp(parse_date(date_str))
+    if asset_type in (AssetType.STOCKS, AssetType.OPTIONS):
+        return cast(pd.Timestamp, fallback.tz_convert("America/New_York"))
+    return fallback
+
+
 def build_target_index(
     start: pd.Timestamp, end: pd.Timestamp, asset_type: AssetType
 ) -> pd.DatetimeIndex:
-    """Return the expected 1-min timestamp index for an asset type over [start, end].
-    Crypto/forex use a continuous grid; stocks use NYSE extended hours (04:00-19:59 ET);
-    options use NYSE regular hours (09:30-15:59 ET). Half-days come from the calendar.
+    """Return the expected 1-min timestamp index for an asset type over the calendar
+    days [start.date(), end.date()]. Bounds are inclusive at the session level:
+    stocks/options return every session bar on those dates (no mid-session clipping),
+    crypto/forex return a continuous grid from 00:00 UTC on start.date() through
+    23:59 UTC on end.date(). Callers that pass NYSE-asset df.index timestamps for the
+    round-trip case must convert to ET first so .date() reflects the trading day, not
+    the UTC day (last bar of an EST session lands at 00:59 UTC the next calendar day).
     """
     if asset_type in (AssetType.CRYPTO, AssetType.FOREX):
-        return pd.date_range(start=start, end=end, freq="1min")
+        start_utc = pd.Timestamp(start.date(), tz="UTC")
+        end_utc = pd.Timestamp(end.date(), tz="UTC") + pd.Timedelta(hours=23, minutes=59)
+        return pd.date_range(start=start_utc, end=end_utc, freq="1min")
 
     nyse = mcal.get_calendar("NYSE")
     if asset_type == AssetType.STOCKS:
@@ -94,10 +116,12 @@ def build_target_index(
         raise ValueError(
             f"No NYSE sessions for {asset_type} between {start.date()} and {end.date()}"
         )
-    idx = mcal.date_range(
-        sched, frequency="1min", closed="left", force_close=False, session=sessions
+    return cast(
+        pd.DatetimeIndex,
+        mcal.date_range(
+            sched, frequency="1min", closed="left", force_close=False, session=sessions
+        ),
     )
-    return cast(pd.DatetimeIndex, idx[(idx >= start) & (idx <= end)])
 
 
 def get_files_in_range(data_dir: Path, asset_type: str, start: date, end: date) -> list[Path]:

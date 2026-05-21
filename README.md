@@ -79,3 +79,28 @@ python main.py SPY --format csv --date-start 2024-01-01
   majors this is rare and the interpolation is close to truth, but for thin-volume
   assets with long gaps the synthetic values can drift meaningfully from what real
   trades would have produced.
+
+## Testing
+
+End-to-end integration tests in `tests/integration/` run the full pipeline against real
+Polygon flat files and live yfinance data — no mocks. Run with:
+
+```bash
+pytest -m integration -v -s
+```
+
+`-s` disables stdout capture so each test's scenario header, bar counts, price range, and
+boundary spot-checks print to the terminal as it runs. Drop `-s` if you want a quieter pass.
+
+Tests skip per-asset when `data/files/<asset>/` is empty, so wire up the data the same way
+you would for `main.py` (a symlink to your raw-file mirror works). Current coverage:
+
+- **Stocks**: AAPL 7:1 split, NVDA 4:1 + 10:1 splits with dividends, GE 1:8 reverse split,
+  SPY 2020–2023 dividends-only multi-year, QYLD monthly ROC distributions, MSFT 2004 $3.08
+  special dividend (~10% drop), BBBY pre-bankruptcy window.
+- **Crypto**: BTC-USD Luna/Terra crash (soft-AND gate stress), BTC-USD 2020–2022 multi-year.
+- **Forex**: EUR-USD weekend-crossing week, EUR-USD 2022–2024 multi-year.
+- **Options**: not yet covered — the check gate needs a structural replacement first (see
+  the options caveat above).
+
+Expect roughly 2–5 minutes per long-running test on first run.

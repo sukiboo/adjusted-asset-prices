@@ -47,9 +47,14 @@ def save_if_valid(
 def _index_matches_calendar(df: pd.DataFrame, asset_type: AssetType) -> bool:
     """Verify df.index matches the calendar-aware target index for this asset type."""
     ticker = df.columns[0]
-    expected_index = build_target_index(
-        cast(pd.Timestamp, df.index[0]), cast(pd.Timestamp, df.index[-1]), asset_type
-    )
+    start = cast(pd.Timestamp, df.index[0])
+    end = cast(pd.Timestamp, df.index[-1])
+    if asset_type in (AssetType.STOCKS, AssetType.OPTIONS):
+        # Round-trip via ET so .date() inside build_target_index sees the trading day,
+        # not the UTC day (last EST session bar lands at 00:59 UTC the next day).
+        start = start.tz_convert("America/New_York")
+        end = end.tz_convert("America/New_York")
+    expected_index = build_target_index(start, end, asset_type)
     if not df.index.equals(expected_index):
         print(
             f"❗ {ticker} index does not match expected calendar: "
@@ -73,6 +78,54 @@ def _prices_are_valid(df: pd.DataFrame) -> bool:
     return True
 
 
+def _our_daily_close(df: pd.DataFrame, asset_type: AssetType) -> pd.Series:
+    """Reduce our 1-min bars to one daily close per calendar day, aligned to whichever
+    boundary yfinance uses for that asset type's daily Close:
+    - NYSE assets: the 15:59 ET bar (its close is the 4 PM ET regular-session print).
+    - Crypto/forex: the last 1-min bar per UTC day (yfinance reports at midnight UTC).
+    Returns a tz-naive Series indexed by normalized day.
+    """
+    ticker = df.columns[0]
+    s = df[ticker].copy()
+    idx = cast(pd.DatetimeIndex, s.index)
+    if idx.tz is None:
+        idx = idx.tz_localize("UTC")
+        s.index = idx
+
+    if asset_type in (AssetType.STOCKS, AssetType.OPTIONS):
+        et_idx = idx.tz_convert("America/New_York")
+        mask = (et_idx.hour == 15) & (et_idx.minute == 59)
+        daily = s.loc[mask].copy()
+        daily.index = pd.DatetimeIndex(et_idx[mask]).normalize().tz_localize(None)
+        return daily
+
+    if asset_type in (AssetType.CRYPTO, AssetType.FOREX):
+        daily = s.resample("D").last().dropna()
+        daily.index = daily.index.tz_localize(None).normalize()  # type: ignore[attr-defined]
+        return daily
+
+    raise ValueError(f"Unsupported asset type for daily-close reduction: {asset_type}")
+
+
+def _yf_daily_close(
+    ticker: str, asset_type: AssetType, start: pd.Timestamp, end: pd.Timestamp
+) -> pd.Series | None:
+    """Fetch yfinance's daily Close over [start, end] inclusive, normalized to a tz-naive
+    day index. Translates `EUR-USD` → `EURUSD=X` for forex (yfinance returns 404 on the
+    hyphenated form). Returns None when yfinance has no data for the ticker.
+    """
+    yf_ticker = f"{ticker.replace('-', '')}=X" if asset_type == AssetType.FOREX else ticker
+    yf_df = yf.Ticker(yf_ticker).history(start=start, end=end + pd.Timedelta(days=1))
+    if yf_df.empty:
+        return None
+    daily = yf_df["Close"].copy()
+    idx = pd.to_datetime(daily.index)
+    if idx.tz is not None:
+        idx = idx.tz_convert("UTC").tz_localize(None)
+    daily.index = idx.normalize()
+    return daily
+
+
 def compare_to_yf(
     df: pd.DataFrame,
     asset_type: AssetType,
@@ -82,47 +135,18 @@ def compare_to_yf(
 ) -> bool:
     """Compare the price data to Yahoo Finance.
     Displays a plot of the price data and the difference between the two datasets.
-
-    For stocks/options, our daily close is the 1-min bar at 15:59 ET (regular-session
-    close) so it lines up with yfinance's 4 PM ET Close. For other asset types, we
-    fall back to UTC day boundaries since yfinance reports those at midnight UTC.
     """
     ticker = df.columns[0]
     start_date = cast(pd.Timestamp, df.index[0])
     end_date = cast(pd.Timestamp, df.index[-1])
-
-    # Ensure our data is UTC-aware before resampling to get consistent day boundaries
-    our_df = df.copy()
-    if our_df.index.tz is None:  # type: ignore[attr-defined]
-        our_df.index = our_df.index.tz_localize("UTC")  # type: ignore[attr-defined]
-    else:
-        our_df.index = our_df.index.tz_convert("UTC")  # type: ignore[attr-defined]
-
-    if asset_type in (AssetType.STOCKS, AssetType.OPTIONS):
-        # Pick the bar whose window_start is 15:59 ET — its close is the 4 PM ET print
-        et_index = our_df.index.tz_convert("America/New_York")  # type: ignore[attr-defined]
-        mask = (et_index.hour == 15) & (et_index.minute == 59)
-        our_daily = cast(pd.Series, our_df.loc[mask, ticker])
-        our_daily.index = pd.DatetimeIndex(et_index[mask]).normalize().tz_localize(None)
-    else:
-        # Crypto/forex: yfinance reports daily Close at midnight UTC
-        our_daily = our_df[ticker].resample("D").last().dropna()
-        our_daily.index = our_daily.index.tz_localize(None).normalize()  # type: ignore[attr-defined]
+    our_daily = _our_daily_close(df, asset_type)
 
     try:
-        yf_df = yf.Ticker(ticker).history(start=start_date, end=end_date + pd.Timedelta(days=1))
-        if yf_df.empty:
+        yf_daily = _yf_daily_close(ticker, asset_type, start_date, end_date)
+        if yf_daily is None:
             print(f"⚠️  Warning: No yfinance data found for {ticker}")
             return False
 
-        yf_daily = yf_df["Close"].copy()
-        # yfinance returns timezone-aware timestamps; convert to UTC then strip timezone
-        yf_daily_index = pd.to_datetime(yf_daily.index)
-        if yf_daily_index.tz is not None:
-            yf_daily_index = yf_daily_index.tz_convert("UTC").tz_localize(None)
-        yf_daily.index = yf_daily_index.normalize()  # type: ignore[attr-defined]
-
-        # Align datasets
         comparison = pd.concat([our_daily, yf_daily], axis=1).dropna()
         comparison.columns = ["our_close", "yf_close"]
         if comparison.empty:
