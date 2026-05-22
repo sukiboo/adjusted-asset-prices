@@ -98,7 +98,8 @@ you would for `main.py` (a symlink to your raw-file mirror works). Current cover
 - **Stocks**: AAPL 7:1 split, NVDA 4:1 + 10:1 splits with dividends, GE 1:8 reverse split,
   SPY 2020–2023 dividends-only multi-year, QYLD monthly ROC distributions, MSFT 2004 $3.08
   special dividend (~10% drop), BBBY pre-bankruptcy window.
-- **Crypto**: BTC-USD Luna/Terra crash (soft-AND gate stress), BTC-USD 2020–2022 multi-year.
+- **Crypto**: BTC-USD Luna/Terra crash (soft-AND gate stress), BTC-USD 2020–2022 multi-year,
+  ETH-USD 2021–2022 (Merge + FTX), SOL-USD 2022–2023 (FTX collapse + recovery).
 - **Forex**: EUR-USD weekend-crossing week, EUR-USD 2022–2024 multi-year.
 - **Options**: not yet covered — the check gate needs a structural replacement first (see
   the options caveat above).

@@ -32,7 +32,7 @@ def describe(df: pd.DataFrame, ticker: str) -> None:
     print(
         "\n"
         f"🔎 {ticker}: {len(df):,} values from {df.index[0]} to {df.index[-1]},"
-        f" price ranges from ${df[ticker].min():.2f} to ${df[ticker].max():.2f}"
+        f" price ranges from ${df[ticker].min():,.2f} to ${df[ticker].max():,.2f}"
     )
 
 
