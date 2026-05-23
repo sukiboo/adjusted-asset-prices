@@ -9,6 +9,7 @@ from src.constants import (
     DEFAULT_DATE_START,
     DEFAULT_FORMAT,
     DEFAULT_SAVE_DIR,
+    SHOW_PLOT,
 )
 from src.schemas import PriceFileFormat
 from src.utils import parsable_date
@@ -39,4 +40,5 @@ if __name__ == "__main__":
         format=args.format,
         config=CHECKS_CONFIG,
         asset_type=asset_type,
+        show_plot=SHOW_PLOT,
     )

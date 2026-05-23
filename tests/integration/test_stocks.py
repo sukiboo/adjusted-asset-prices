@@ -147,7 +147,7 @@ def test_bbby_pre_bankruptcy_diverges_from_yfinance(stocks_prices: Prices) -> No
     # BBBY (Bed Bath & Beyond) traded through ~2023-04-28 before delisting on bankruptcy.
     # yfinance retains BBBY history but applies post-bankruptcy adjustments (final adj_close
     # drops to ~$0.02), while our pipeline only sees the active-trading prices. As a result,
-    # compare_to_yf diverges by ~92% — well beyond the soft-AND threshold — and check_prices
+    # compare_to_yf diverges by ~92% — far above any stock threshold — and check_prices
     # returns False. This test asserts the divergence: if it ever flips to passing, yfinance
     # changed its delisting-handling behaviour and we should revisit. Documents a known gap,
     # not a green-light test.

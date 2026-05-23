@@ -34,8 +34,7 @@ DateLike = str | date | datetime | pd.Timestamp | None
 
 
 class ChecksConfig(TypedDict):
-    """Parameters for price data checks."""
+    """Per-asset comparison thresholds used by `compare_to_yf`."""
 
     abs_rel_diff_pct_p50: float
     abs_rel_diff_pct_p99: float
-    show_plot: bool

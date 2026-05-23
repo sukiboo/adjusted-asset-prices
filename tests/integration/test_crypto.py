@@ -18,9 +18,10 @@ def test_btc_luna_crash_window(crypto_prices: Prices) -> None:
     # BTC-USD over the May-Jun 2022 Luna/Terra collapse: a high-volatility window that
     # stresses the check gate against yfinance's intrinsic noise floor. yfinance's daily
     # Close for crypto is not drawn from its own 1-min feed (empirically ~0.02-0.07% off
-    # from any 1-min bar even on a quiet week), so p99 |diff| can spike on fast days
-    # without anything being wrong on our end. The soft-AND gate (fail only if BOTH p50
-    # AND p99 exceed thresholds) absorbs that; tightening to OR would false-positive here.
+    # from any 1-min bar even on a quiet week), so on fast days both |diff| quantiles
+    # drift well above the stocks thresholds. The crypto-specific thresholds in
+    # CHECKS_CONFIG (looser than stocks) are sized to absorb that noise floor while
+    # still catching real divergence.
     df, asset_type = quiet_get(crypto_prices, "BTC-USD", "2022-05-01", "2022-06-30")
     assert asset_type == AssetType.CRYPTO
     describe(df, "BTC-USD")
@@ -55,8 +56,8 @@ def test_eth_2021_2022(crypto_prices: Prices) -> None:
 def test_sol_2022_2023(crypto_prices: Prices) -> None:
     # SOL-USD across 2022-2023: extreme drawdown coverage (~$170 → ~$8 through the FTX
     # collapse in Nov 2022, then a ~15x recovery into late 2023). A lower-liquidity coin
-    # than BTC/ETH with sharper boundary noise, so this is the most aggressive test of
-    # whether soft-AND absorbs yfinance's daily-vs-minute inconsistency over a long range.
+    # than BTC/ETH with sharper boundary noise — the most aggressive test of whether the
+    # crypto thresholds tolerate yfinance's daily-vs-minute inconsistency over a long range.
     df, asset_type = quiet_get(crypto_prices, "SOL-USD", "2022-01-01", "2023-12-31")
     assert asset_type == AssetType.CRYPTO
     describe(df, "SOL-USD")

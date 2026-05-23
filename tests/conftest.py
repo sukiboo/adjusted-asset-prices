@@ -9,9 +9,7 @@ import pytest
 
 from src import Prices, check_prices
 from src.constants import CHECKS_CONFIG, DEFAULT_DATA_DIR
-from src.schemas import AssetType, ChecksConfig
-
-CHECKS_CONFIG_NO_PLOT: ChecksConfig = {**CHECKS_CONFIG, "show_plot": False}
+from src.schemas import AssetType
 
 
 @pytest.fixture(scope="session")
@@ -70,5 +68,5 @@ def quiet_get(
 
 
 def quiet_check(df: pd.DataFrame, asset_type: AssetType) -> bool:
-    with quiet_output(("Price comparison",)):
-        return check_prices(df, config=CHECKS_CONFIG_NO_PLOT, asset_type=asset_type)
+    with quiet_output(("Price comparison", "violate the threshold")):
+        return check_prices(df, config=CHECKS_CONFIG, asset_type=asset_type, show_plot=False)

@@ -11,18 +11,24 @@ from .utils import build_target_index, save_prices, verify_saved_prices
 sns.set_theme(style="darkgrid", palette="muted", font="monospace", rc={"lines.linewidth": 2})
 
 
-def check_prices(df: pd.DataFrame, config: ChecksConfig, asset_type: AssetType) -> bool:
+def check_prices(
+    df: pd.DataFrame,
+    config: dict[AssetType, ChecksConfig],
+    asset_type: AssetType,
+    show_plot: bool,
+) -> bool:
     """Collection of sanity checks for the price data."""
     print(f"\n🔍 Checking {df.columns[0]} price data...")
+    thresholds = config[asset_type]
     return (
         _index_matches_calendar(df, asset_type)
         and _prices_are_valid(df)
         and compare_to_yf(
             df,
             asset_type=asset_type,
-            abs_rel_diff_pct_p50=config["abs_rel_diff_pct_p50"],
-            abs_rel_diff_pct_p99=config["abs_rel_diff_pct_p99"],
-            show_plot=config["show_plot"],
+            abs_rel_diff_pct_p50=thresholds["abs_rel_diff_pct_p50"],
+            abs_rel_diff_pct_p99=thresholds["abs_rel_diff_pct_p99"],
+            show_plot=show_plot,
         )
     )
 
@@ -31,11 +37,12 @@ def save_if_valid(
     df: pd.DataFrame,
     save_dir: str,
     format: PriceFileFormat,
-    config: ChecksConfig,
+    config: dict[AssetType, ChecksConfig],
     asset_type: AssetType,
+    show_plot: bool,
 ) -> bool:
     """Run checks; on success, save to disk and verify the round-trip."""
-    if not check_prices(df, config=config, asset_type=asset_type):
+    if not check_prices(df, config=config, asset_type=asset_type, show_plot=show_plot):
         print("\n❌ Some checks failed, not saving the price data!")
         return False
     print("\n🎉 All checks passed, saving the price data...")
@@ -139,7 +146,6 @@ def compare_to_yf(
     ticker = df.columns[0]
     start_date = cast(pd.Timestamp, df.index[0])
     end_date = cast(pd.Timestamp, df.index[-1])
-    our_daily = _our_daily_close(df, asset_type)
 
     try:
         yf_daily = _yf_daily_close(ticker, asset_type, start_date, end_date)
@@ -147,62 +153,75 @@ def compare_to_yf(
             print(f"⚠️  Warning: No yfinance data found for {ticker}")
             return False
 
-        comparison = pd.concat([our_daily, yf_daily], axis=1).dropna()
+        comparison = pd.concat([_our_daily_close(df, asset_type), yf_daily], axis=1).dropna()
         comparison.columns = ["our_close", "yf_close"]
         if comparison.empty:
             print("⚠️  Warning: No overlapping dates")
             return False
 
-        # Calculate differences
         diff_usd = comparison["our_close"] - comparison["yf_close"]
         diff_pct = 100 * (diff_usd / comparison["yf_close"])
 
-        # Print summary
-        p50_abs_diff = diff_pct.abs().median()
-        p99_abs_diff = diff_pct.abs().quantile(0.99)
-        if p50_abs_diff > abs_rel_diff_pct_p50 and p99_abs_diff > abs_rel_diff_pct_p99:
-            status = "❗"
-        elif p50_abs_diff > 0.5 * abs_rel_diff_pct_p50 or p99_abs_diff > 0.5 * abs_rel_diff_pct_p99:
-            status = "❕"
-        else:
-            status = "✔️ "
-        p01_pct, p50_pct, p99_pct = diff_pct.quantile([0.01, 0.50, 0.99])
-        p01_usd, p50_usd, p99_usd = diff_usd.quantile([0.01, 0.50, 0.99])
-        print(
-            f"{status} Price comparison over {len(comparison)} days (p01/p50/p99):"
-            f" {p01_pct:.3f}% / {p50_pct:.3f}% / {p99_pct:.3f}%"
-            f" = ${p01_usd:.2f} / ${p50_usd:.2f} / ${p99_usd:.2f}"
+        passed = _diff_passes_thresholds(
+            diff_pct, diff_usd, abs_rel_diff_pct_p50, abs_rel_diff_pct_p99
         )
-
-        # Plot the price comparison
         if show_plot:
-            _, ax1 = plt.subplots(figsize=(12, 6))
-            ax1.plot(comparison.index, comparison["our_close"], alpha=0.9, label="Adjusted prices")
-            ax1.plot(comparison.index, comparison["yf_close"], alpha=0.9, label="Yahoo Finance")
-            ax1.set_xlabel("Date")
-            ax1.set_ylabel("Price ($)", color="black")
-            ax1.legend(loc="upper left")
-
-            ax2 = ax1.twinx()
-            ax2.plot(
-                comparison.index,
-                diff_pct,
-                color="red",
-                linestyle=":",
-                alpha=0.4,
-                label="Relative diff",
-            )
-            ax2.set_ylim(-abs_rel_diff_pct_p99, abs_rel_diff_pct_p99)
-            ax2.set_ylabel("Relative price difference (%)", color="red")
-            ax2.grid(False)
-            ax2.legend(loc="upper right")
-
-            plt.title(f"{ticker} price comparison")
-            plt.tight_layout()
-            plt.show()
-
-        return status != "❗"
+            _plot_comparison(comparison, diff_pct, ticker, abs_rel_diff_pct_p99)
+        return passed
 
     except Exception as e:
         print(f"⚠️  Error comparing with yfinance: {e}")
         return False
+
+
+def _diff_passes_thresholds(
+    diff_pct: pd.Series,
+    diff_usd: pd.Series,
+    abs_rel_diff_pct_p50: float,
+    abs_rel_diff_pct_p99: float,
+) -> bool:
+    # OR gate on |diff| quantiles; warn band at half threshold (also OR).
+    abs_diff = diff_pct.abs()
+    metrics = [
+        ("abs_p50", abs_diff.median(), abs_rel_diff_pct_p50),
+        ("abs_p99", abs_diff.quantile(0.99), abs_rel_diff_pct_p99),
+    ]
+    fail = any(v > t for _, v, t in metrics)
+    warn = any(v > 0.5 * t for _, v, t in metrics)
+    status = "❗" if fail else "❕" if warn else "✔️ "
+
+    p01_pct, p50_pct, p99_pct = diff_pct.quantile([0.01, 0.50, 0.99])
+    p01_usd, p50_usd, p99_usd = diff_usd.quantile([0.01, 0.50, 0.99])
+    print(
+        f"{status} Price comparison over {len(diff_pct)} days (p01/p50/p99):"
+        f" {p01_pct:.3f}% / {p50_pct:.3f}% / {p99_pct:.3f}%"
+        f" = ${p01_usd:.2f} / ${p50_usd:.2f} / ${p99_usd:.2f}"
+    )
+    if fail:
+        msg = " and ".join(f"{n} = {v:.2f}% > {t:.1f}%" for n, v, t in metrics if v > t)
+        print(f"‼️  Price differences violate the threshold: {msg}")
+    return not fail
+
+
+def _plot_comparison(
+    comparison: pd.DataFrame, diff_pct: pd.Series, ticker: str, diff_ylim: float
+) -> None:
+    _, ax1 = plt.subplots(figsize=(12, 6))
+    ax1.plot(comparison.index, comparison["our_close"], alpha=0.9, label="Adjusted prices")
+    ax1.plot(comparison.index, comparison["yf_close"], alpha=0.9, label="Yahoo Finance")
+    ax1.set_xlabel("Date")
+    ax1.set_ylabel("Price ($)", color="black")
+    ax1.legend(loc="upper left")
+
+    ax2 = ax1.twinx()
+    ax2.plot(
+        comparison.index, diff_pct, color="red", linestyle=":", alpha=0.4, label="Relative diff"
+    )
+    ax2.set_ylim(-diff_ylim, diff_ylim)
+    ax2.set_ylabel("Relative price difference (%)", color="red")
+    ax2.grid(False)
+    ax2.legend(loc="upper right")
+
+    plt.title(f"{ticker} price comparison")
+    plt.tight_layout()
+    plt.show()
