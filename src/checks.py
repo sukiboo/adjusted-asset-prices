@@ -89,7 +89,10 @@ def _our_daily_close(df: pd.DataFrame, asset_type: AssetType) -> pd.Series:
     """Reduce our 1-min bars to one daily close per calendar day, aligned to whichever
     boundary yfinance uses for that asset type's daily Close:
     - NYSE assets: the 15:59 ET bar (its close is the 4 PM ET regular-session print).
-    - Crypto/forex: the last 1-min bar per UTC day (yfinance reports at midnight UTC).
+    - Crypto: the last 1-min bar per UTC day (yfinance reports at midnight UTC).
+    - Forex: the bar at 00:00 Europe/London (yfinance's daily index labels each row
+      with London midnight and reports Close == Open == that snapshot price; the
+      systematic ~1h UTC offset matters on volatile pairs like USD-JPY).
     Returns a tz-naive Series indexed by normalized day.
     """
     ticker = df.columns[0]
@@ -106,9 +109,19 @@ def _our_daily_close(df: pd.DataFrame, asset_type: AssetType) -> pd.Series:
         daily.index = pd.DatetimeIndex(et_idx[mask]).normalize().tz_localize(None)
         return daily
 
-    if asset_type in (AssetType.CRYPTO, AssetType.FOREX):
+    if asset_type == AssetType.CRYPTO:
         daily = s.resample("D").last().dropna()
         daily.index = daily.index.tz_localize(None).normalize()  # type: ignore[attr-defined]
+        return daily
+
+    if asset_type == AssetType.FOREX:
+        london_idx = idx.tz_convert("Europe/London")
+        mask = (london_idx.hour == 0) & (london_idx.minute == 0)
+        daily = s.loc[mask].copy()
+        # Index by London wall-clock date to match yfinance's row labels. Indexing by
+        # UTC date instead would collapse Sun-GMT (UTC 00:00) and Mon-BST (UTC 23:00
+        # prior day) onto the same UTC date around the spring DST transition.
+        daily.index = pd.DatetimeIndex(london_idx[mask]).tz_localize(None).normalize()
         return daily
 
     raise ValueError(f"Unsupported asset type for daily-close reduction: {asset_type}")
@@ -127,9 +140,15 @@ def _yf_daily_close(
         return None
     daily = yf_df["Close"].copy()
     idx = pd.to_datetime(daily.index)
-    if idx.tz is not None:
-        idx = idx.tz_convert("UTC").tz_localize(None)
-    daily.index = idx.normalize()
+    # Forex rows are tz-aware Europe/London and their date *label* is the London date —
+    # converting to UTC first would shift BST rows back one day. For other asset types
+    # the UTC normalization is benign (NY midnight is already on the NY date in UTC).
+    if asset_type == AssetType.FOREX:
+        daily.index = idx.tz_localize(None).normalize()
+    else:
+        if idx.tz is not None:
+            idx = idx.tz_convert("UTC").tz_localize(None)
+        daily.index = idx.normalize()
     return daily
 
 

@@ -5,6 +5,17 @@ Adjust raw historical prices for splits and dividends.
 Follow-up to the [`historical-asset-prices`](https://github.com/sukiboo/historical-asset-prices) repo,
 which produces the raw input files this tool reads from `./data/files/<asset_type>/`.
 
+## Scope
+
+Built for **multi-year price histories** of assets where long histories are hard to source
+elsewhere. Accuracy is calibrated for long horizons; short windows can show small
+divergences from yfinance's daily Close, because yfinance's snapshot doesn't precisely
+line up with our 1-min UTC bars (an offset of a couple of hours of FX market state for
+forex, fractions of a minute for crypto). That noise averages out across many days but
+can dominate a 5-day sample on a single high-volatility day — a BoJ intervention, a
+tariff-day spike, an exchange collapse. If you need a week of data, other providers serve
+it more easily; the value here is in multi-year histories you can't get cleanly elsewhere.
+
 ## Setup
 
 ```bash

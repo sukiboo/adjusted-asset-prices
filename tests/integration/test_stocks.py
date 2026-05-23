@@ -26,7 +26,7 @@ def _close_at(df: pd.DataFrame, et_date: str) -> float:
 
 
 @pytest.mark.integration
-def test_aapl_2014_split_applied(stocks_prices: Prices) -> None:
+def test_aapl_2014_split(stocks_prices: Prices) -> None:
     # AAPL 7:1 split ex-date 2014-06-09. Last pre-split session is 2014-06-06.
     # After back-adjustment, the close-to-close ratio across the boundary should
     # be near 1 (daily noise), not near 7 (the raw, unadjusted ratio).
@@ -46,7 +46,7 @@ def test_aapl_2014_split_applied(stocks_prices: Prices) -> None:
 
 
 @pytest.mark.integration
-def test_spy_long_running(stocks_prices: Prices) -> None:
+def test_spy_2020_2023(stocks_prices: Prices) -> None:
     # SPY across 2020-2023: quarterly dividends compound (~16 events), several half-days,
     # COVID-era volatility. No splits, so this isolates the dividend-adjustment path
     # over a multi-year range; check_prices must still match yfinance's Adj Close.
@@ -57,7 +57,7 @@ def test_spy_long_running(stocks_prices: Prices) -> None:
 
 
 @pytest.mark.integration
-def test_nvda_two_splits_with_dividends(stocks_prices: Prices) -> None:
+def test_nvda_2020_2024_splits(stocks_prices: Prices) -> None:
     # NVDA across 2020-2024: two splits (4:1 ex 2021-07-20, 10:1 ex 2024-06-10) interleaved
     # with small quarterly dividends. Exercises adjust_splits applied twice in sequence
     # plus the split-then-dividend ordering. Adjusted pre/post close ratios should be ~1
@@ -104,7 +104,7 @@ def test_ge_2021_reverse_split(stocks_prices: Prices) -> None:
 
 
 @pytest.mark.integration
-def test_qyld_monthly_distributions(stocks_prices: Prices) -> None:
+def test_qyld_2023_distributions(stocks_prices: Prices) -> None:
     # QYLD pays monthly distributions (~1%/month), most of which are return-of-capital that
     # yfinance lumps under .dividends. The pipeline treats them the same as ordinary
     # dividends — that's correct because yfinance's Adj Close lumps them the same way, so
@@ -143,7 +143,7 @@ def test_msft_2004_special_dividend(stocks_prices: Prices) -> None:
 
 
 @pytest.mark.integration
-def test_bbby_pre_bankruptcy_diverges_from_yfinance(stocks_prices: Prices) -> None:
+def test_bbby_2023_delisting(stocks_prices: Prices) -> None:
     # BBBY (Bed Bath & Beyond) traded through ~2023-04-28 before delisting on bankruptcy.
     # yfinance retains BBBY history but applies post-bankruptcy adjustments (final adj_close
     # drops to ~$0.02), while our pipeline only sees the active-trading prices. As a result,

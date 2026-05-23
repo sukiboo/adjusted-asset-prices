@@ -14,7 +14,7 @@ def crypto_prices(data_dir: Path) -> Prices:
 
 
 @pytest.mark.integration
-def test_btc_luna_crash_window(crypto_prices: Prices) -> None:
+def test_btc_usd_luna_crash(crypto_prices: Prices) -> None:
     # BTC-USD over the May-Jun 2022 Luna/Terra collapse: a high-volatility window that
     # stresses the check gate against yfinance's intrinsic noise floor. yfinance's daily
     # Close for crypto is not drawn from its own 1-min feed (empirically ~0.02-0.07% off
@@ -29,7 +29,7 @@ def test_btc_luna_crash_window(crypto_prices: Prices) -> None:
 
 
 @pytest.mark.integration
-def test_btc_long_running(crypto_prices: Prices) -> None:
+def test_btc_usd_2020_2022(crypto_prices: Prices) -> None:
     # BTC-USD across 2020-2022: ~1.5M-bar continuous 1-min grid spanning the COVID
     # crash, bull run, and Luna/FTX selloff. Exercises backfill + comparison at scale
     # and catches regressions that only surface on larger inputs (memory blowups,
@@ -41,7 +41,7 @@ def test_btc_long_running(crypto_prices: Prices) -> None:
 
 
 @pytest.mark.integration
-def test_eth_2021_2022(crypto_prices: Prices) -> None:
+def test_eth_usd_2021_2022(crypto_prices: Prices) -> None:
     # ETH-USD across 2021-2022: covers the 2021 bull run, the Sept-2022 Merge (PoW → PoS,
     # no price discontinuity but a major protocol event), Luna in May, and the Nov 2022
     # FTX collapse. Distinct underlying from BTC so we exercise the comparison path on a
@@ -53,7 +53,7 @@ def test_eth_2021_2022(crypto_prices: Prices) -> None:
 
 
 @pytest.mark.integration
-def test_sol_2022_2023(crypto_prices: Prices) -> None:
+def test_sol_usd_2022_2023(crypto_prices: Prices) -> None:
     # SOL-USD across 2022-2023: extreme drawdown coverage (~$170 → ~$8 through the FTX
     # collapse in Nov 2022, then a ~15x recovery into late 2023). A lower-liquidity coin
     # than BTC/ETH with sharper boundary noise — the most aggressive test of whether the
