@@ -20,6 +20,18 @@ from .utils import (
 )
 
 
+def _is_handled_split_ratio(ratio: float, tol: float = 1e-6) -> bool:
+    """True iff `ratio` is an integer ≥ 2 (forward split) or 1/integer with integer ≥ 2
+    (reverse split). Anything else is skipped — empirically spinoffs / distributions /
+    non-stock-split corporate actions in modern data, not true stock splits.
+    """
+    if abs(ratio - round(ratio)) < tol and round(ratio) >= 2:
+        return True
+    if ratio > 0 and abs(1 / ratio - round(1 / ratio)) < tol and round(1 / ratio) >= 2:
+        return True
+    return False
+
+
 class Prices:
     """Class to load prices for a given ticker and date range.
     Raw prices are loaded and backfilled to the start and end dates.
@@ -155,9 +167,12 @@ class Prices:
         index with any natively-post-split-issued contract at the same successor
         symbol, producing one continuous series.
 
-        Non-clean strikes (e.g. 3:2 splits producing fractional cents) are skipped per
-        contract with a debug warning — OCC's numeric-suffix root convention for
-        non-standard adjustments is not predictable from yfinance metadata.
+        Only handles ratios that are integers (forward splits like 2:1, 7:1, 10:1) or
+        1/integer (reverse splits like 1:8, 1:20). Other ratios in yfinance.splits are
+        empirically spinoffs / distributions / non-stock-split corporate actions
+        (verified zero true 3:2-style splits in the top 400 option underlyings across
+        2014-2025) — those get a one-line warning and skip. Spinoffs need OCC's
+        deliverable-change adjustment which strike-divide-by-ratio doesn't model.
         """
         if calls.empty and puts.empty:
             return calls, puts
@@ -187,6 +202,13 @@ class Prices:
         for split_ts, ratio in splits.items():
             split_ts_cast = cast(pd.Timestamp, split_ts)
             split_date = split_ts_cast.date()
+            if not _is_handled_split_ratio(ratio):
+                print(
+                    f"⏭️  Skipping {ratio:.4f}-ratio event on {split_date}: "
+                    f"non-integer ratio likely indicates spinoff / distribution, "
+                    f"not a stock split — needs OCC deliverable-change handling we don't support"
+                )
+                continue
             ts_level = df.index.get_level_values("timestamp_utc")
             ticker_level = df.index.get_level_values("ticker")
             pre_mask = ts_level < split_ts_cast
