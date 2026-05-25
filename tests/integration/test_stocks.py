@@ -21,7 +21,7 @@ def _close_at(df: pd.DataFrame, et_date: str) -> float:
     target = pd.Timestamp(et_date).date()
     mask = (et_index.date == target) & (et_index.hour == 15) & (et_index.minute == 59)
     bars = cast(pd.Series, df.loc[mask, ticker])
-    assert len(bars) == 1, f"expected one 15:59 ET bar on {et_date}, got {len(bars)}"
+    assert len(bars) == 1, f"❌ expected one 15:59 ET bar on {et_date}, got {len(bars)}"
     return float(bars.iloc[0])
 
 
@@ -32,7 +32,7 @@ def test_aapl_2014_split(stocks_prices: Prices) -> None:
     # be near 1 (daily noise), not near 7 (the raw, unadjusted ratio). Runs the default
     # split-only path (no dividends), so the output compares against yfinance's raw Close.
     df, asset_type = quiet_get(stocks_prices, "AAPL", "2014-05-01", "2014-07-31")
-    assert asset_type == AssetType.STOCKS
+    assert asset_type == AssetType.STOCKS, "❌ asset type misdetected (expected STOCKS)"
     describe(df, "AAPL")
 
     pre = _close_at(df, "2014-06-06")
@@ -41,9 +41,9 @@ def test_aapl_2014_split(stocks_prices: Prices) -> None:
     print(
         f"🪚  AAPL split 2014-06-09: pre=${pre:.4f}, post=${post:.4f}, ratio={ratio:.4f} (raw ~7.0)"
     )
-    assert 0.95 < ratio < 1.05, f"split-adjusted close ratio {ratio:.3f} (expected ~1)"
+    assert 0.95 < ratio < 1.05, f"❌ split-adjusted close ratio {ratio:.3f} (expected ~1)"
 
-    assert quiet_check(df, asset_type)
+    assert quiet_check(df, asset_type), "❌ price comparison to yfinance failed"
 
 
 @pytest.mark.integration
@@ -58,16 +58,20 @@ def test_aapl_2023_dividend_conventions(stocks_prices: Prices) -> None:
         stocks_prices, "AAPL", "2023-01-01", "2023-12-31", dividends=False
     )
     div_adj, _ = quiet_get(stocks_prices, "AAPL", "2023-01-01", "2023-12-31", dividends=True)
-    assert asset_type == AssetType.STOCKS
+    assert asset_type == AssetType.STOCKS, "❌ asset type misdetected (expected STOCKS)"
     describe(split_only, "AAPL")
 
     first_split = float(split_only["AAPL"].iloc[0])
     first_div = float(div_adj["AAPL"].iloc[0])
     print(f"🔩 AAPL 2023 first bar: split-only=${first_split:.4f}, div-adj=${first_div:.4f}")
-    assert first_div < first_split, "dividend back-adjustment should lower early-window prices"
+    assert first_div < first_split, "❌ dividend back-adjustment should lower early-window prices"
 
-    assert quiet_check(split_only, asset_type, dividends_adjusted=False)
-    assert quiet_check(div_adj, asset_type, dividends_adjusted=True)
+    assert quiet_check(
+        split_only, asset_type, dividends_adjusted=False
+    ), "❌ split-only output failed yfinance comparison"
+    assert quiet_check(
+        div_adj, asset_type, dividends_adjusted=True
+    ), "❌ dividend-adjusted output failed yfinance comparison"
 
 
 @pytest.mark.integration
@@ -76,9 +80,11 @@ def test_spy_2020_2023(stocks_prices: Prices) -> None:
     # COVID-era volatility. No splits, so this isolates the dividend-adjustment path
     # over a multi-year range; the dividend-adjusted output must match yfinance's Adj Close.
     df, asset_type = quiet_get(stocks_prices, "SPY", "2020-01-01", "2023-12-31", dividends=True)
-    assert asset_type == AssetType.STOCKS
+    assert asset_type == AssetType.STOCKS, "❌ asset type misdetected (expected STOCKS)"
     describe(df, "SPY")
-    assert quiet_check(df, asset_type, dividends_adjusted=True)
+    assert quiet_check(
+        df, asset_type, dividends_adjusted=True
+    ), "❌ dividend-adjusted price comparison to yfinance failed"
 
 
 @pytest.mark.integration
@@ -89,7 +95,7 @@ def test_nvda_2020_2024_splits(stocks_prices: Prices) -> None:
     # across both split boundaries (dividends are tiny relative to the split factors, so
     # the spot-checks hold with dividends on).
     df, asset_type = quiet_get(stocks_prices, "NVDA", "2020-01-01", "2024-12-31", dividends=True)
-    assert asset_type == AssetType.STOCKS
+    assert asset_type == AssetType.STOCKS, "❌ asset type misdetected (expected STOCKS)"
     describe(df, "NVDA")
 
     for split_date, prev_session, raw_ratio in [
@@ -103,9 +109,11 @@ def test_nvda_2020_2024_splits(stocks_prices: Prices) -> None:
             f"🪚  NVDA split {split_date}: pre=${pre:.4f}, post=${post:.4f}, "
             f"ratio={ratio:.4f} (raw {raw_ratio})"
         )
-        assert 0.95 < ratio < 1.05, f"NVDA split-adjusted ratio at {split_date} = {ratio:.3f}"
+        assert 0.95 < ratio < 1.05, f"❌ NVDA split-adjusted ratio at {split_date} = {ratio:.3f}"
 
-    assert quiet_check(df, asset_type, dividends_adjusted=True)
+    assert quiet_check(
+        df, asset_type, dividends_adjusted=True
+    ), "❌ dividend-adjusted price comparison to yfinance failed"
 
 
 @pytest.mark.integration
@@ -115,7 +123,7 @@ def test_ge_2021_reverse_split(stocks_prices: Prices) -> None:
     # pre/post close ratio should be ~1 (raw would be ~0.125). Window deliberately stays
     # before GE's 2023 GEHC spinoff, which the pipeline does NOT adjust for.
     df, asset_type = quiet_get(stocks_prices, "GE", "2021-07-01", "2021-09-30")
-    assert asset_type == AssetType.STOCKS
+    assert asset_type == AssetType.STOCKS, "❌ asset type misdetected (expected STOCKS)"
     describe(df, "GE")
 
     pre = _close_at(df, "2021-07-30")
@@ -124,9 +132,9 @@ def test_ge_2021_reverse_split(stocks_prices: Prices) -> None:
     print(
         f"🪚  GE split 2021-08-02: pre=${pre:.4f}, post=${post:.4f}, ratio={ratio:.4f} (raw ~0.125)"
     )
-    assert 0.95 < ratio < 1.05, f"GE reverse-split-adjusted ratio = {ratio:.3f}"
+    assert 0.95 < ratio < 1.05, f"❌ GE reverse-split-adjusted ratio = {ratio:.3f}"
 
-    assert quiet_check(df, asset_type)
+    assert quiet_check(df, asset_type), "❌ price comparison to yfinance failed"
 
 
 @pytest.mark.integration
@@ -137,9 +145,11 @@ def test_qyld_2023_distributions(stocks_prices: Prices) -> None:
     # check_prices against yfinance still passes despite the ROC vs. ordinary classification
     # gap (see CLAUDE.md: .capital_gains is empty across every fund tested).
     df, asset_type = quiet_get(stocks_prices, "QYLD", "2023-01-01", "2023-12-31", dividends=True)
-    assert asset_type == AssetType.STOCKS
+    assert asset_type == AssetType.STOCKS, "❌ asset type misdetected (expected STOCKS)"
     describe(df, "QYLD")
-    assert quiet_check(df, asset_type, dividends_adjusted=True)
+    assert quiet_check(
+        df, asset_type, dividends_adjusted=True
+    ), "❌ dividend-adjusted price comparison to yfinance failed"
 
 
 @pytest.mark.integration
@@ -151,7 +161,7 @@ def test_msft_2004_special_dividend(stocks_prices: Prices) -> None:
     # smaller COST 2024 $15 special (~2% drop) we considered, which sits inside daily-noise
     # width and would not signal a missed adjustment.
     df, asset_type = quiet_get(stocks_prices, "MSFT", "2004-10-01", "2004-12-31", dividends=True)
-    assert asset_type == AssetType.STOCKS
+    assert asset_type == AssetType.STOCKS, "❌ asset type misdetected (expected STOCKS)"
     describe(df, "MSFT")
 
     pre = _close_at(df, "2004-11-12")
@@ -163,9 +173,11 @@ def test_msft_2004_special_dividend(stocks_prices: Prices) -> None:
     # Upper bound at 1.0 assumes non-negative ex-date drift (stocks usually don't drop the
     # full dividend intraday). True in general, true for MSFT 2004 specifically (observed
     # 0.98), and cleanly excludes the broken/unadjusted case (~1.11).
-    assert 0.95 < ratio < 1.0, f"MSFT special-div adjusted ratio = {ratio:.4f}"
+    assert 0.95 < ratio < 1.0, f"❌ MSFT special-div adjusted ratio = {ratio:.4f}"
 
-    assert quiet_check(df, asset_type, dividends_adjusted=True)
+    assert quiet_check(
+        df, asset_type, dividends_adjusted=True
+    ), "❌ dividend-adjusted price comparison to yfinance failed"
 
 
 @pytest.mark.integration
@@ -179,8 +191,8 @@ def test_bbby_2023_delisting(stocks_prices: Prices) -> None:
     # divergence: if it ever flips to passing, yfinance changed its delisting handling and we
     # should revisit. Documents a known gap, not a green-light test.
     df, asset_type = quiet_get(stocks_prices, "BBBY", "2023-01-01", "2023-04-21")
-    assert asset_type == AssetType.STOCKS
+    assert asset_type == AssetType.STOCKS, "❌ asset type misdetected (expected STOCKS)"
     describe(df, "BBBY")
     assert not quiet_check(
         df, asset_type
-    ), "BBBY/yfinance compare unexpectedly passes -- yfinance delisting handling may have changed"
+    ), "❌ BBBY/yfinance compare unexpectedly passes -- yfinance delisting handling may have changed"

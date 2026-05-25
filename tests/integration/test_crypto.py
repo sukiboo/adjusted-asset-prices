@@ -23,9 +23,9 @@ def test_btc_usd_luna_crash(crypto_prices: Prices) -> None:
     # CHECKS_CONFIG (looser than stocks) are sized to absorb that noise floor while
     # still catching real divergence.
     df, asset_type = quiet_get(crypto_prices, "BTC-USD", "2022-05-01", "2022-06-30")
-    assert asset_type == AssetType.CRYPTO
+    assert asset_type == AssetType.CRYPTO, "❌ asset type misdetected (expected CRYPTO)"
     describe(df, "BTC-USD")
-    assert quiet_check(df, asset_type)
+    assert quiet_check(df, asset_type), "❌ price comparison to yfinance failed"
 
 
 @pytest.mark.integration
@@ -35,9 +35,9 @@ def test_btc_usd_2020_2022(crypto_prices: Prices) -> None:
     # and catches regressions that only surface on larger inputs (memory blowups,
     # accumulated tz drift, etc.).
     df, asset_type = quiet_get(crypto_prices, "BTC-USD", "2020-01-01", "2022-12-31")
-    assert asset_type == AssetType.CRYPTO
+    assert asset_type == AssetType.CRYPTO, "❌ asset type misdetected (expected CRYPTO)"
     describe(df, "BTC-USD")
-    assert quiet_check(df, asset_type)
+    assert quiet_check(df, asset_type), "❌ price comparison to yfinance failed"
 
 
 @pytest.mark.integration
@@ -47,9 +47,9 @@ def test_eth_usd_2021_2022(crypto_prices: Prices) -> None:
     # FTX collapse. Distinct underlying from BTC so we exercise the comparison path on a
     # second high-liquidity coin where any per-ticker yfinance quirks would surface.
     df, asset_type = quiet_get(crypto_prices, "ETH-USD", "2021-01-01", "2022-12-31")
-    assert asset_type == AssetType.CRYPTO
+    assert asset_type == AssetType.CRYPTO, "❌ asset type misdetected (expected CRYPTO)"
     describe(df, "ETH-USD")
-    assert quiet_check(df, asset_type)
+    assert quiet_check(df, asset_type), "❌ price comparison to yfinance failed"
 
 
 @pytest.mark.integration
@@ -59,6 +59,6 @@ def test_sol_usd_2022_2023(crypto_prices: Prices) -> None:
     # than BTC/ETH with sharper boundary noise — the most aggressive test of whether the
     # crypto thresholds tolerate yfinance's daily-vs-minute inconsistency over a long range.
     df, asset_type = quiet_get(crypto_prices, "SOL-USD", "2022-01-01", "2023-12-31")
-    assert asset_type == AssetType.CRYPTO
+    assert asset_type == AssetType.CRYPTO, "❌ asset type misdetected (expected CRYPTO)"
     describe(df, "SOL-USD")
-    assert quiet_check(df, asset_type)
+    assert quiet_check(df, asset_type), "❌ price comparison to yfinance failed"

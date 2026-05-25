@@ -122,7 +122,14 @@ you would for `main.py` (a symlink to your raw-file mirror works). Current cover
 - **Forex**: EUR-USD weekend-crossing week, EUR-USD 2022–2024 multi-year.
 - **Options**: NVDA 10:1 2024 (clean-strike unification), AAPL 7:1 2014 (non-clean /
   suffixed-root unification), TSLA 3:1 2022 (clean integer ratio), AAPL 2023 no-split
-  (clean-window structural gate). Validated via the structural no-arb gate (`check_options`)
-  against the split-only underlying, since yfinance has no historical per-contract series.
+  (clean-window structural gate), NVDA 4:1 2021 and TSLA 5:1 2020 (cumulative forward
+  multi-split, ÷40 / ÷15), GRPN 1:20 2020 and VXX two-1:4 (reverse and cumulative-reverse
+  splits, ×20 / ×16). Forward-split tests validate via the structural no-arb gate
+  (`check_options`) against the split-only underlying, since yfinance has no historical
+  per-contract series. The reverse-split tests assert split continuity and the cumulative
+  factor but **not** the gate: reverse splits only occur on penny stocks, decaying
+  leveraged/vol ETPs, or high-yield REITs, whose carry/illiquidity breaks the gate's
+  spot-based intrinsic floor independently of split correctness (a survey of every option
+  underlying in the data found no clean gate-passing reverse split).
 
 Expect roughly 2–5 minutes per long-running test on first run.
