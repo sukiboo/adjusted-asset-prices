@@ -326,7 +326,7 @@ def load_ticker_data(
 def fetch_splits(ticker: str, start: pd.Timestamp) -> pd.Series:
     """Fetch yfinance splits for `ticker` with ex-date >= `start`.
     No upper bound: events with ex-date *after* the data window still apply (the
-    `index < ex_date` mask in adjust_splits covers all rows), matching yfinance's
+    `index < ex_date` mask in adjust_for_splits covers all rows), matching yfinance's
     convention that historical prices reflect all known future events.
     """
     splits = yf.Ticker(ticker).splits

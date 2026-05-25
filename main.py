@@ -13,7 +13,7 @@ from src.constants import (
     OPTIONS_CHECKS_CONFIG,
     SHOW_PLOT,
 )
-from src.schemas import PriceFileFormat
+from src.schemas import AssetType, PriceFileFormat
 from src.utils import parsable_date
 
 
@@ -25,14 +25,24 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--date-end", type=parsable_date, default=DEFAULT_DATE_END)
     p.add_argument("--data-dir", default=DEFAULT_DATA_DIR)
     p.add_argument("--save-dir", default=DEFAULT_SAVE_DIR)
-    p.add_argument(
+    # Mutually exclusive: a dividend-adjusted underlying can't align with the (never
+    # dividend-adjusted) options, so passing both errors at parse time, before any retrieval.
+    adjust = p.add_mutually_exclusive_group()
+    adjust.add_argument(
+        "--dividends",
+        action="store_true",
+        help="Back-adjust the stock series for cash dividends (Adj-Close-style total return). "
+        "Off by default — the output is the actual split-adjusted traded price. Mutually "
+        "exclusive with --options.",
+    )
+    adjust.add_argument(
         "--options",
         action="store_true",
         help="Also load + backfill + split-unify + structural-gate + save all option "
-        "contracts on the underlying, after the underlying's stocks pass succeeds. "
-        "Aborts if either pass's checks fail.",
+        "contracts on the underlying (the underlying is saved split-only, aligned with the "
+        "options), after the underlying's stocks pass succeeds. Aborts if either pass fails. "
+        "Mutually exclusive with --dividends.",
     )
-    p.add_argument("--debug", action="store_true")
     return p.parse_args()
 
 
@@ -48,58 +58,50 @@ def _print_options_summary(label: str, df) -> None:
 if __name__ == "__main__":
     args = parse_args()
 
-    prices = Prices(data_dir=args.data_dir, debug=args.debug)
-    intrinsic_ref = None  # set in the args.options branch below if --options
+    prices = Prices(data_dir=args.data_dir)
 
     if args.options:
-        # Options need the split-adjusted-only underlying as the intrinsic-floor
-        # reference (cash dividends are priced into option premiums, not back-adjusted
-        # out — using the dividend-adjusted series would overstate intrinsic on
-        # pre-dividend bars and trigger false alarms). Decompose `get_prices` so we
-        # can capture the split-only intermediate before dividends are applied.
-        raw_df, asset_type = prices.load_prices(
-            ticker=args.ticker, date_start=args.date_start, date_end=args.date_end
+        # Retrieve the options for the ticker plus its (split-only) underlying in one call.
+        underlying, calls, puts = prices.options.get_options(
+            args.ticker, date_start=args.date_start, date_end=args.date_end
         )
-        backfilled = prices.backfill_prices(
-            raw_df, asset_type, date_start=args.date_start, date_end=args.date_end
-        )
-        intrinsic_ref = prices.adjust_splits(backfilled, asset_type)
-        df = prices.adjust_dividends(intrinsic_ref, asset_type)
-    else:
-        df, asset_type = prices.get_prices(
-            ticker=args.ticker, date_start=args.date_start, date_end=args.date_end
-        )
-
-    stocks_ok = save_if_valid(
-        df,
-        save_dir=args.save_dir,
-        format=args.format,
-        config=CHECKS_CONFIG,
-        asset_type=asset_type,
-        show_plot=SHOW_PLOT,
-    )
-    if args.options and not stocks_ok:
-        print(f"❌ {args.ticker} stock price failed verification -- aborting options pass!")
-        sys.exit(1)
-
-    if args.options:
-        assert intrinsic_ref is not None  # set above when args.options is True
-        calls, puts = prices.load_options(
-            underlying=args.ticker, date_start=args.date_start, date_end=args.date_end
-        )
-        calls, puts = prices.adjust_options_splits(calls, puts, args.ticker)
-        calls, puts = prices.backfill_options(calls, puts)
+        if not save_if_valid(
+            underlying,
+            save_dir=args.save_dir,
+            format=args.format,
+            config=CHECKS_CONFIG,
+            asset_type=AssetType.STOCKS,
+            show_plot=SHOW_PLOT,
+            dividends_adjusted=False,
+        ):
+            print(f"❌ {args.ticker} stock price failed verification -- aborting options pass!")
+            sys.exit(1)
         print(f"\n🗃️  Option contracts for {args.ticker}:")
         _print_options_summary("calls", calls)
         _print_options_summary("puts", puts)
-        options_ok = save_options_if_valid(
+        if not save_options_if_valid(
             calls,
             puts,
             underlying=args.ticker,
-            underlying_df=intrinsic_ref,
+            underlying_df=underlying,
             save_dir=args.save_dir,
             format=args.format,
             config=OPTIONS_CHECKS_CONFIG,
-        )
-        if not options_ok:
+        ):
             sys.exit(1)
+    else:
+        df, asset_type = prices.asset.get_prices(
+            ticker=args.ticker,
+            date_start=args.date_start,
+            date_end=args.date_end,
+            dividends=args.dividends,
+        )
+        save_if_valid(
+            df,
+            save_dir=args.save_dir,
+            format=args.format,
+            config=CHECKS_CONFIG,
+            asset_type=asset_type,
+            show_plot=SHOW_PLOT,
+            dividends_adjusted=args.dividends,
+        )

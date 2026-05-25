@@ -7,8 +7,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from src import Prices, check_prices
-from src.constants import CHECKS_CONFIG, DEFAULT_DATA_DIR
+from src import Prices, check_options, check_prices
+from src.constants import CHECKS_CONFIG, DEFAULT_DATA_DIR, OPTIONS_CHECKS_CONFIG
 from src.schemas import AssetType
 
 
@@ -61,12 +61,37 @@ def quiet_output(keep_substrs: tuple[str, ...] = ()) -> Iterator[None]:
 
 
 def quiet_get(
-    prices: Prices, ticker: str, date_start: str, date_end: str
+    prices: Prices, ticker: str, date_start: str, date_end: str, dividends: bool = False
 ) -> tuple[pd.DataFrame, AssetType]:
     with quiet_output():
-        return prices.get_prices(ticker=ticker, date_start=date_start, date_end=date_end)
+        return prices.asset.get_prices(
+            ticker=ticker, date_start=date_start, date_end=date_end, dividends=dividends
+        )
 
 
-def quiet_check(df: pd.DataFrame, asset_type: AssetType) -> bool:
+def quiet_check(df: pd.DataFrame, asset_type: AssetType, dividends_adjusted: bool = False) -> bool:
     with quiet_output(("Price comparison", "violate the threshold")):
-        return check_prices(df, config=CHECKS_CONFIG, asset_type=asset_type, show_plot=False)
+        return check_prices(
+            df,
+            config=CHECKS_CONFIG,
+            asset_type=asset_type,
+            show_plot=False,
+            dividends_adjusted=dividends_adjusted,
+        )
+
+
+def quiet_get_options(
+    prices: Prices, underlying: str, date_start: str, date_end: str
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    # Full options pipeline plus the split-only underlying reference the gate needs,
+    # mirroring main.py's --options flow. Returns (calls, puts, underlying).
+    with quiet_output():
+        result = prices.options.get_options(underlying, date_start, date_end)
+    return result.calls, result.puts, result.underlying
+
+
+def quiet_check_options(
+    calls: pd.DataFrame, puts: pd.DataFrame, underlying: str, underlying_df: pd.DataFrame
+) -> bool:
+    with quiet_output(("≤", "intrinsic floor", "bars positive", "within contract")):
+        return check_options(calls, puts, underlying, underlying_df, OPTIONS_CHECKS_CONFIG)
