@@ -5,6 +5,7 @@ DEFAULT_DATE_START: str | None = None
 DEFAULT_DATE_END: str | None = None
 DEFAULT_DATA_DIR = "./data/files"
 DEFAULT_SAVE_DIR = "./data/prices"
+DEFAULT_SHOW_PLOT = False
 
 CHECKS_CONFIG: dict[AssetType, ChecksConfig] = {
     AssetType.STOCKS: {"abs_rel_diff_pct_p50": 0.05, "abs_rel_diff_pct_p99": 0.5},
@@ -25,5 +26,3 @@ OPTIONS_INTERNALS = {
     "min_split_factor": 2,  # only x:1 and 1:x with integer x >= 2 splits are handled
     "successor_strike_tol": 0.01,  # 1¢ max strike gap to match a non-clean contract's successor
 }
-
-SHOW_PLOT = True

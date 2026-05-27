@@ -9,6 +9,7 @@ from src.constants import (
     DEFAULT_DATE_START,
     DEFAULT_FORMAT,
     DEFAULT_SAVE_DIR,
+    DEFAULT_SHOW_PLOT,
 )
 from src.schemas import PriceFileFormat
 from src.utils import parsable_date
@@ -22,6 +23,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--date-end", type=parsable_date, default=DEFAULT_DATE_END)
     p.add_argument("--data-dir", default=DEFAULT_DATA_DIR)
     p.add_argument("--save-dir", default=DEFAULT_SAVE_DIR)
+    p.add_argument(
+        "--plot",
+        action="store_true",
+        default=DEFAULT_SHOW_PLOT,
+        help="Display the price-comparison plot against yfinance. Off by default.",
+    )
     # Mutually exclusive: a dividend-adjusted underlying can't align with the (never
     # dividend-adjusted) options, so passing both errors at parse time, before any retrieval.
     adjust = p.add_mutually_exclusive_group()
@@ -53,5 +60,6 @@ if __name__ == "__main__":
         options=args.options,
         save_dir=args.save_dir,
         format=args.format,
+        show_plot=args.plot,
     )
     sys.exit(0 if ok else 1)

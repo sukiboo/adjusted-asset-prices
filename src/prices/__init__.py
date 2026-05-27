@@ -3,8 +3,8 @@ from ..constants import (
     CHECKS_CONFIG,
     DEFAULT_FORMAT,
     DEFAULT_SAVE_DIR,
+    DEFAULT_SHOW_PLOT,
     OPTIONS_CHECKS_CONFIG,
-    SHOW_PLOT,
 )
 from ..schemas import AssetType, PriceFileFormat
 from .assets import AssetPrices
@@ -28,6 +28,7 @@ class Prices:
         options: bool = False,
         save_dir: str = DEFAULT_SAVE_DIR,
         format: PriceFileFormat = DEFAULT_FORMAT,
+        show_plot: bool = DEFAULT_SHOW_PLOT,
     ) -> bool:
         """Retrieve → check → save `ticker`, and (when `options`) its option contracts.
         The asset series is always retrieved via the same `get_prices` path — split-only when
@@ -47,7 +48,7 @@ class Prices:
             format=format,
             config=CHECKS_CONFIG,
             asset_type=asset_type,
-            show_plot=SHOW_PLOT,
+            show_plot=show_plot,
             dividends_adjusted=dividends,
         )
         if options and saved:

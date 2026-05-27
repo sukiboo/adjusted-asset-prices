@@ -30,7 +30,7 @@ The repo's `.python-version` pins the venv, so `cd`-ing in auto-activates it if 
 ## Usage
 
 ```bash
-python main.py <TICKER> [OPTIONS]
+python run.py <TICKER> [OPTIONS]
 ```
 
 End-to-end pipeline for one ticker: load raw bars → backfill missing minutes → adjust for
@@ -42,13 +42,14 @@ Options:
 
 | flag            | default          | description                                          |
 |-----------------|------------------|------------------------------------------------------|
+| `--data-dir`    | `./data/files`   | raw input directory                                  |
+| `--save-dir`    | `./data/prices`  | adjusted output directory                            |
 | `--format`      | `parquet`        | output format: `parquet` or `csv`                    |
 | `--date-start`  | (earliest)       | inclusive start date, `YYYY-MM-DD`                   |
 | `--date-end`    | (latest)         | inclusive end date, `YYYY-MM-DD`                     |
-| `--data-dir`    | `./data/files`   | raw input directory                                  |
-| `--save-dir`    | `./data/prices`  | adjusted output directory                            |
 | `--dividends`   | off              | also back-adjust stocks for cash dividends           |
 | `--options`     | off              | also fetch the underlying's option contracts         |
+| `--plot`        | off              | display the price-comparison plot against yfinance   |
 
 `--dividends` and `--options` are mutually exclusive: the default output is the actual
 split-adjusted (not dividend-adjusted) price, so options align with their underlying.
@@ -56,9 +57,9 @@ split-adjusted (not dividend-adjusted) price, so options align with their underl
 Examples:
 
 ```bash
-python main.py BTC-USD
-python main.py SPY --dividends --format csv --date-start 2024-01-01
-python main.py AAPL --options
+python run.py BTC-USD
+python run.py SPY --dividends --format csv --date-start 2024-01-01
+python run.py AAPL --options
 ```
 
 ## Caveats
@@ -127,7 +128,7 @@ pytest -m integration -v -s
 boundary spot-checks print to the terminal as it runs. Drop `-s` if you want a quieter pass.
 
 Tests skip per-asset when `data/files/<asset>/` is empty, so wire up the data the same way
-you would for `main.py` (a symlink to your raw-file mirror works). Current coverage:
+you would for `run.py` (a symlink to your raw-file mirror works). Current coverage:
 
 - **Stocks**: AAPL 7:1 split (split-only path), AAPL 2023 split-only-vs-dividend-adjusted
   both-ways (convention switch), NVDA 4:1 + 10:1 splits with dividends, GE 1:8 reverse split,
