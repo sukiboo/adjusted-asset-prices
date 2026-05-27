@@ -9,7 +9,7 @@ import pandas as pd
 import pandas_market_calendars as mcal
 import yfinance as yf
 
-from .constants import OPTIONS_INTERNALS
+from .constants import DATA_SOURCE_URL, OPTIONS_INTERNALS
 from .schemas import (
     ASSET_TYPE_CONFIG,
     ASSET_TYPES,
@@ -24,9 +24,13 @@ def check_data_dir(data_dir: str) -> Tuple[Path, list[str]]:
     """Check if data directory exists and contains expected asset type subfolders.
     Returns data_dir path and asset_types list."""
     data_dir_path = Path(data_dir)
+    download_hint = (
+        f"Download the raw daily price files into `{data_dir}/<asset_type>/` -- "
+        f"files for all asset types (through 2026) are available at:\n  {DATA_SOURCE_URL}"
+    )
 
     if not data_dir_path.exists() or not data_dir_path.is_dir():
-        raise ValueError(f"Data directory does not exist: `{data_dir}`")
+        raise ValueError(f"Data directory does not exist: `{data_dir}`.\n{download_hint}")
 
     asset_types = sorted(
         list(
@@ -38,9 +42,10 @@ def check_data_dir(data_dir: str) -> Tuple[Path, list[str]]:
 
     if not asset_types:
         raise ValueError(
-            f"Data directory is empty or does not contain expected asset type subfolders.\n"
+            f"Data directory `{data_dir}` has no expected asset type subfolders.\n"
             f"Expected at least one of: {ASSET_TYPES} but found: "
-            f"{[item.name for item in data_dir_path.iterdir() if item.is_dir()]}"
+            f"{[item.name for item in data_dir_path.iterdir() if item.is_dir()]}\n"
+            f"{download_hint}"
         )
 
     return data_dir_path, asset_types

@@ -7,6 +7,10 @@ DEFAULT_DATA_DIR = "./data/files"
 DEFAULT_SAVE_DIR = "./data/prices"
 DEFAULT_SHOW_PLOT = False
 
+# Where users can get the raw daily price files when they have none locally (pre-built daily
+# files for all asset types through 2026). Surfaced by `check_data_dir` in the no-data error.
+DATA_SOURCE_URL = "https://www.dropbox.com/scl/fo/xd5a5s5cwa0imf6gvplzv/AL1ffzRw3_AEfeEwRoKLQms?rlkey=ah6c8ps5zvco29npoeoro831k&dl=0"
+
 CHECKS_CONFIG: dict[AssetType, ChecksConfig] = {
     AssetType.STOCKS: {"abs_rel_diff_pct_p50": 0.05, "abs_rel_diff_pct_p99": 0.5},
     AssetType.CRYPTO: {"abs_rel_diff_pct_p50": 0.1, "abs_rel_diff_pct_p99": 1.5},
